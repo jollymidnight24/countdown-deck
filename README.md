@@ -5,10 +5,24 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 ## Features
 
 - Dashboard of multiple countdowns, each showing **days / hours / minutes / seconds**, updating every second.
-- **Add, edit, and remove** countdowns. Each has a title, a target date & time, and an accent color.
-- **Presets** for quick adds, plus full manual entry.
-- Countdowns are saved locally (JSON in the OS user-data folder) and restored on launch.
-- **Full auto-update** via `electron-updater` against GitHub Releases, with an in-app status badge and one-click "restart to update."
+- **Add, edit, and remove** countdowns. Each has a title, target date & time, accent color, and category.
+- **Count-up mode** — track time *elapsed since* an event, not just time remaining.
+- **Recurring** countdowns (weekly / monthly / yearly) that automatically roll forward to the next occurrence.
+- **Pin** important countdowns to the top, **drag to reorder**, **search**, **sort** (soonest / name / manual), and **filter by category**.
+- **Desktop notifications** when a countdown reaches zero (and when a recurring one rolls over).
+- **Light / dark theme** toggle.
+- **Menu-bar / system-tray view** showing your next countdowns, plus an optional **always-on-top** window.
+- **Movie/TV release lookup** via TMDB — search a title and auto-fill its release date (needs a free TMDB API key, set in Settings).
+- **Import / export** your countdowns to a JSON file.
+- A custom app icon, and **full auto-update** via `electron-updater` against GitHub Releases, with an in-app badge and one-click "restart to update."
+
+### Setting the TMDB API key
+
+The movie/TV lookup uses [The Movie Database](https://www.themoviedb.org). It's free: create an account, go to **Settings → API**, request a **v3 API key**, then paste it into Countdown Deck's **Settings (⚙)**. The key is stored locally on your machine only. Note that TMDB returns known release / first-air dates; far-future seasons without an announced date won't have one yet.
+
+### A note on closing vs. quitting
+
+Because of the tray view, closing the window **hides** the app to the menu bar/tray rather than quitting it. Use the tray menu's **Quit** (or Cmd/Ctrl+Q) to fully exit.
 
 ## Run it in development
 

@@ -4,23 +4,40 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
   <title>Countdown Deck</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-theme="dark">
   <header class="topbar">
     <div class="brand">
       <span class="logo">&#9203;</span>
       <h1>Countdown Deck</h1>
     </div>
-    <div class="topbar-actions">
-      <div id="updateBadge" class="update-badge hidden"></div>
-      <button id="checkUpdatesBtn" class="btn ghost" title="Check for updates">Check for updates</button>
-      <span id="versionTag" class="version-tag"></span>
-      <button id="addBtn" class="btn primary">+ Add countdown</button>
+
+    <div class="toolbar">
+      <input id="searchInput" type="search" class="search" placeholder="Search…" />
+      <select id="sortSelect" class="select" title="Sort">
+        <option value="manual">Manual order</option>
+        <option value="soonest">Soonest first</option>
+        <option value="name">Name (A–Z)</option>
+      </select>
+      <select id="categoryFilter" class="select" title="Filter by category">
+        <option value="">All categories</option>
+      </select>
+      <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
+      <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
+      <button id="addBtn" class="btn primary">+ Add</button>
     </div>
   </header>
+
+  <div class="subbar">
+    <div id="updateBadge" class="update-badge hidden"></div>
+    <div class="subbar-right">
+      <button id="checkUpdatesBtn" class="btn ghost tiny">Check for updates</button>
+      <span id="versionTag" class="version-tag"></span>
+    </div>
+  </div>
 
   <main>
     <section id="emptyState" class="empty-state hidden">
@@ -28,7 +45,6 @@
       <button id="emptyAddBtn" class="btn primary">Add your first countdown</button>
       <div class="preset-row" id="presetRow"></div>
     </section>
-
     <div id="grid" class="grid"></div>
   </main>
 
@@ -36,26 +52,77 @@
   <div id="modal" class="modal-overlay hidden">
     <div class="modal">
       <h2 id="modalTitle">Add countdown</h2>
+
+      <div class="tmdb-box">
+        <label class="inline-label">Look up a movie/TV release (optional)</label>
+        <div class="tmdb-row">
+          <input id="tmdbQuery" type="text" placeholder="e.g. House of the Dragon" />
+          <button type="button" id="tmdbSearchBtn" class="btn ghost">Search</button>
+        </div>
+        <div id="tmdbResults" class="tmdb-results"></div>
+      </div>
+
       <form id="countdownForm">
-        <label>
-          Title
+        <label>Title
           <input id="titleInput" type="text" maxlength="80" placeholder="SpaceX IPO" required />
         </label>
-        <label>
-          Target date &amp; time
-          <input id="dateInput" type="datetime-local" required />
-        </label>
-        <label>
-          Accent color
-          <input id="colorInput" type="color" value="#5b8cff" />
-        </label>
+        <div class="form-grid">
+          <label>Target date &amp; time
+            <input id="dateInput" type="datetime-local" required />
+          </label>
+          <label>Mode
+            <select id="modeInput">
+              <option value="down">Count down to</option>
+              <option value="up">Count up since</option>
+            </select>
+          </label>
+          <label>Repeats
+            <select id="recurrenceInput">
+              <option value="none">Never</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </label>
+          <label>Category
+            <input id="categoryInput" type="text" maxlength="40" placeholder="e.g. Space" list="categoryList" />
+            <datalist id="categoryList"></datalist>
+          </label>
+          <label>Accent color
+            <input id="colorInput" type="color" value="#5b8cff" />
+          </label>
+        </div>
         <div class="modal-actions">
           <button type="button" id="cancelBtn" class="btn ghost">Cancel</button>
-          <button type="submit" id="saveBtn" class="btn primary">Save</button>
+          <button type="submit" class="btn primary">Save</button>
         </div>
       </form>
-      <div class="preset-row" id="modalPresetRow">
-        <span class="preset-label">Quick add:</span>
+
+      <div class="preset-row" id="modalPresetRow"><span class="preset-label">Quick add:</span></div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Settings</h2>
+      <label class="switch-row">
+        <span>Keep window always on top</span>
+        <input id="alwaysOnTopInput" type="checkbox" />
+      </label>
+      <label>TMDB API key (for movie/TV lookups)
+        <input id="tmdbKeyInput" type="text" placeholder="Paste your free TMDB v3 API key" />
+      </label>
+      <p class="hint">Get a free key at themoviedb.org → Settings → API. Stored locally on your machine only.</p>
+      <hr />
+      <div class="io-row">
+        <button type="button" id="exportBtn" class="btn ghost">Export countdowns…</button>
+        <button type="button" id="importBtn" class="btn ghost">Import countdowns…</button>
+        <input id="importFile" type="file" accept="application/json" class="hidden" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="settingsCloseBtn" class="btn ghost">Close</button>
+        <button type="button" id="settingsSaveBtn" class="btn primary">Save</button>
       </div>
     </div>
   </div>
