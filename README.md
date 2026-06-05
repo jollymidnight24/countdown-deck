@@ -22,7 +22,11 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 
 ### Trading sessions
 
-US exchanges (NYSE/Nasdaq) use a built-in 2026–27 market-holiday calendar so their countdowns skip those days as well as weekends; other exchanges skip weekends only. Session times are the regular cash-session hours per exchange and don't model half-days or lunch breaks. The holiday list is hard-coded in `src/renderer/app.js` (`US_HOLIDAYS`) — update it each year.
+US exchanges (NYSE/Nasdaq) skip weekends **and** market holidays. The holiday calendar is **computed by rule for any year** (no hard-coded list to maintain, no network needed): New Year's, MLK, Washington's Birthday, Good Friday, Memorial Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, and Christmas — with the standard weekend-observance rules (including the NYSE quirk that a New Year's Day falling on Saturday is *not* observed the preceding Friday). It also models **early-close half-days** (1:00 PM ET): the day after Thanksgiving, July 3 when it precedes a weekday Independence Day, and Christmas Eve when it's a normal trading day. Other exchanges skip weekends only, and lunch breaks aren't modeled.
+
+The day after Thanksgiving, etc., will show "early close" in the card. The whole calendar lives in `usCalendar()` in `src/renderer/app.js` if you ever need to tweak a rule.
+
+A few **one-click trading presets** (NYSE open/close, LSE open, TSE open) appear as quick-add chips on the empty dashboard and in the Add dialog.
 
 ### Backgrounds & uploads
 

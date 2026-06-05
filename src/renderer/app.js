@@ -47,10 +47,71 @@ const CANVAS_BGS = [{ id: 'stars', name: 'Starfield (animated)' }, { id: 'partic
 // ---------------------------------------------------------------------------
 // Trading sessions: exchanges, holidays, and next-occurrence math
 // ---------------------------------------------------------------------------
-const US_HOLIDAYS = new Set([
-  '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
-  '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31', '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24'
-]);
+// US market (NYSE/Nasdaq) holidays are rule-based, so we COMPUTE them for any
+// year instead of hard-coding — self-maintaining, offline, no API key.
+function dowUTC(y, mo, d) { return new Date(Date.UTC(y, mo - 1, d)).getUTCDay(); }
+function shiftYMD(y, mo, d, delta) {
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
+}
+function nthWeekday(y, mo, weekday, n) {
+  const first = dowUTC(y, mo, 1);
+  return 1 + ((weekday - first + 7) % 7) + (n - 1) * 7;
+}
+function lastWeekday(y, mo, weekday) {
+  const days = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const last = dowUTC(y, mo, days);
+  return days - ((last - weekday + 7) % 7);
+}
+function easterSunday(y) { // Anonymous Gregorian algorithm
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return [y, month, day];
+}
+// Weekend holidays observed Fri/Mon — but New Year's on Saturday is NOT
+// observed on the preceding Friday (NYSE rule).
+function observed(y, mo, d, isNewYear) {
+  const dow = dowUTC(y, mo, d);
+  if (dow === 6) return isNewYear ? null : shiftYMD(y, mo, d, -1);
+  if (dow === 0) return shiftYMD(y, mo, d, 1);
+  return [y, mo, d];
+}
+const _calCache = new Map();
+function usCalendar(year) {
+  if (_calCache.has(year)) return _calCache.get(year);
+  const holidays = new Set(), halfDays = new Set();
+  const add = (t) => { if (t) holidays.add(ymdKey(t[0], t[1], t[2])); };
+
+  add(observed(year, 1, 1, true));                       // New Year's
+  add([year, 1, nthWeekday(year, 1, 1, 3)]);             // MLK (3rd Mon Jan)
+  add([year, 2, nthWeekday(year, 2, 1, 3)]);             // Washington (3rd Mon Feb)
+  add(shiftYMD(...easterSunday(year), -2));              // Good Friday
+  add([year, 5, lastWeekday(year, 5, 1)]);               // Memorial (last Mon May)
+  if (year >= 2022) add(observed(year, 6, 19));          // Juneteenth
+  add(observed(year, 7, 4));                             // Independence Day
+  add([year, 9, nthWeekday(year, 9, 1, 1)]);             // Labor (1st Mon Sep)
+  const thanks = nthWeekday(year, 11, 4, 4);             // Thanksgiving (4th Thu Nov)
+  add([year, 11, thanks]);
+  add(observed(year, 12, 25));                           // Christmas
+
+  // Early-close half-days (1pm ET)
+  halfDays.add(ymdKey(year, 11, thanks + 1));            // day after Thanksgiving
+  if (dowUTC(year, 7, 4) >= 1 && dowUTC(year, 7, 4) <= 5 && dowUTC(year, 7, 3) >= 1 && dowUTC(year, 7, 3) <= 5)
+    halfDays.add(ymdKey(year, 7, 3));                    // July 3 before a weekday July 4
+  const dec24 = dowUTC(year, 12, 24);
+  if (dec24 >= 1 && dec24 <= 5 && !holidays.has(ymdKey(year, 12, 24)))
+    halfDays.add(ymdKey(year, 12, 24));                  // Christmas Eve (when a normal trading day)
+
+  const cal = { holidays, halfDays };
+  _calCache.set(year, cal);
+  return cal;
+}
+function isUSHoliday(y, mo, d) { return usCalendar(y).holidays.has(ymdKey(y, mo, d)); }
+function usHalfDay(y, mo, d) { return usCalendar(y).halfDays.has(ymdKey(y, mo, d)); }
 
 const SESSION_LABEL = { pre: 'Pre-market open', open: 'Market open', close: 'Market close', post: 'Post-market close' };
 
@@ -89,17 +150,26 @@ function ymdKey(y, mo, d) { return `${y}-${pad(mo)}-${pad(d)}`; }
 function isTradingDay(y, mo, d, ex) {
   const dow = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
   if (dow === 0 || dow === 6) return false;
-  if (ex.holidays === 'us' && US_HOLIDAYS.has(ymdKey(y, mo, d))) return false;
+  if (ex.holidays === 'us' && isUSHoliday(y, mo, d)) return false;
   return true;
 }
+// Session start time for a given day, applying US early-close half-days.
+function sessionTimeFor(ex, sessionKey, y, mo, d) {
+  let hhmm = ex.sessions[sessionKey];
+  if (!hhmm) return null;
+  if (ex.holidays === 'us' && usHalfDay(y, mo, d)) {
+    if (sessionKey === 'close') hhmm = '13:00';
+    else if (sessionKey === 'post') hhmm = '17:00';
+  }
+  return hhmm;
+}
 function nextSessionMs(ex, sessionKey, fromMs) {
-  const hhmm = ex && ex.sessions[sessionKey];
-  if (!hhmm) return NaN;
-  const [sh, sm] = hhmm.split(':').map(Number);
+  if (!ex || !ex.sessions[sessionKey]) return NaN;
   const z = getZoned(new Date(fromMs), ex.tz);
   let y = z.y, mo = z.mo, d = z.d;
   for (let i = 0; i < 400; i++) {
     if (isTradingDay(y, mo, d, ex)) {
+      const [sh, sm] = sessionTimeFor(ex, sessionKey, y, mo, d).split(':').map(Number);
       const inst = wallToUtc(y, mo, d, sh, sm, ex.tz);
       if (inst > fromMs) return inst;
     }
@@ -247,8 +317,14 @@ function formatInstant(ms) {
 function formatTarget(c) {
   const ms = effectiveTargetMs(c, Date.now());
   if (c.kind === 'trading') {
+    const ex = exchangeById(c.exchange);
     const sess = SESSION_LABEL[c.session] || c.session;
-    return `${sess} · ${formatInstant(ms)} · each trading day`;
+    let early = '';
+    if (ex && ex.holidays === 'us' && (c.session === 'close' || c.session === 'post') && isFinite(ms)) {
+      const z = getZoned(new Date(ms), ex.tz);
+      if (usHalfDay(z.y, z.mo, z.d)) early = ' · early close';
+    }
+    return `${sess} · ${formatInstant(ms)}${early} · each trading day`;
   }
   const verb = c.mode === 'up' ? 'Since' : 'Target';
   const rep = c.recurrence !== 'none' ? ` · repeats ${c.recurrence}` : '';
@@ -748,6 +824,26 @@ function addPreset(p) {
   persist(); render();
 }
 
+const TRADING_PRESETS = [
+  { exchange: 'nyse', session: 'open', color: '#46d39a' },
+  { exchange: 'nyse', session: 'close', color: '#ff8c5b' },
+  { exchange: 'lse', session: 'open', color: '#5b8cff' },
+  { exchange: 'tse', session: 'open', color: '#ff5b7a' }
+];
+function tradingPresetLabel(p) {
+  const ex = exchangeById(p.exchange);
+  return `${ex.name.replace(/\s*\(.*\)$/, '')} ${p.session === 'open' ? 'open' : p.session === 'close' ? 'close' : p.session}`;
+}
+function addTradingPreset(p) {
+  const ex = exchangeById(p.exchange);
+  countdowns.push(normalize({
+    kind: 'trading', exchange: p.exchange, session: p.session, mode: 'down',
+    title: `${ex.name.replace(/\s*\(.*\)$/, '')} · ${SESSION_LABEL[p.session]}`,
+    category: 'Markets', color: p.color || '#46d39a'
+  }));
+  persist(); render();
+}
+
 // ===========================================================================
 // Drag to reorder
 // ===========================================================================
@@ -991,12 +1087,18 @@ async function init() {
   applyDashboardBg();
   sortSelect.value = settings.sort;
 
-  // preset chips
+  // preset chips (date presets + trading-session presets)
   for (const container of [$('presetRow'), $('modalPresetRow')]) {
     for (const p of PRESETS) {
       const chip = document.createElement('button');
       chip.type = 'button'; chip.className = 'preset-chip'; chip.textContent = p.title;
       chip.addEventListener('click', () => addPreset(p));
+      container.appendChild(chip);
+    }
+    for (const p of TRADING_PRESETS) {
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'preset-chip'; chip.textContent = '📈 ' + tradingPresetLabel(p);
+      chip.addEventListener('click', () => addTradingPreset(p));
       container.appendChild(chip);
     }
   }
