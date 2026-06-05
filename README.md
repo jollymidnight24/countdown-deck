@@ -10,6 +10,10 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Recurring** countdowns (weekly / monthly / yearly) that automatically roll forward to the next occurrence.
 - **Pin** important countdowns to the top, **drag to reorder**, **search**, **sort** (soonest / name / manual), and **filter by category**.
 - **End-of-countdown alerts**, chosen per countdown — any combination of a **sound** (six built-in alarm tones, or your own uploaded audio), a **banner notification**, and a **full-screen flash**. Each countdown can use one, several, or all at once.
+- **Milestone reminders** — optional heads-up banners at 1 day / 1 hour / 10 minutes before a countdown ends (per countdown; fire once per occurrence).
+- **Progress bars** on each card showing how far along you are toward the target.
+- **Focus mode** — click any card to view that single countdown full-screen with oversized digits.
+- **Quiet hours** — a scheduled mute window (e.g. 10 PM–7 AM) on top of the manual Do Not Disturb toggle, plus a **configurable snooze length**.
 - **Light / dark theme** toggle.
 - **Menu-bar / system-tray view** with your choice of what to show: the **soonest** countdown, a **specific** one you pick, or **cycle** through them all at an interval you set. Plus an optional **always-on-top** window.
 - **Auto-find dates** — search a movie or TV show and the app fills in the real date automatically. **TV shows use [TVmaze](https://www.tvmaze.com/api)** (free, no key) to get the next episode's **exact air time including timezone** (e.g. a 9:00 PM ET premiere lands precisely). **Movies use TMDB** release dates (needs a free key). Manual entry always remains available.

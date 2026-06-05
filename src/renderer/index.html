@@ -12,6 +12,21 @@
   <!-- Dashboard background layer (image / animation) -->
   <div id="bgLayer"><canvas id="bgCanvas"></canvas></div>
 
+  <!-- Full-screen focus view for a single countdown -->
+  <div id="focusOverlay" class="hidden">
+    <button id="focusClose" class="btn ghost">✕ Close</button>
+    <div class="focus-inner">
+      <div class="focus-title" id="focusTitle"></div>
+      <div class="focus-timer">
+        <div class="unit"><div class="num" data-fu="d">0</div><div class="lbl">Days</div></div>
+        <div class="unit"><div class="num" data-fu="h">00</div><div class="lbl">Hours</div></div>
+        <div class="unit"><div class="num" data-fu="m">00</div><div class="lbl">Min</div></div>
+        <div class="unit"><div class="num" data-fu="s">00</div><div class="lbl">Sec</div></div>
+      </div>
+      <div class="focus-target" id="focusTarget"></div>
+    </div>
+  </div>
+
   <!-- Full-screen end-of-countdown flash -->
   <div id="flashOverlay" class="hidden">
     <div class="flash-card">
@@ -148,6 +163,12 @@
           </div>
           <label class="switch-row"><span>Banner notification</span><input id="alertBannerInput" type="checkbox" checked /></label>
           <label class="switch-row"><span>Full-screen flash</span><input id="alertFlashInput" type="checkbox" /></label>
+          <div class="milestones">
+            <span class="ms-label">Heads-up before it ends:</span>
+            <label class="ms-check"><input type="checkbox" id="ms1440" /> 1 day</label>
+            <label class="ms-check"><input type="checkbox" id="ms60" /> 1 hour</label>
+            <label class="ms-check"><input type="checkbox" id="ms10" /> 10 min</label>
+          </div>
         </fieldset>
 
         <fieldset class="appearance">
@@ -230,6 +251,14 @@
         <label>Display timezone
           <select id="timeZoneInput"></select>
         </label>
+      </div>
+
+      <h3 class="settings-h">Alerts</h3>
+      <label class="switch-row"><span>Quiet hours (mute all alerts during a window)</span><input id="quietEnabledInput" type="checkbox" /></label>
+      <div class="form-grid">
+        <label>Quiet from <input id="quietStartInput" type="time" /></label>
+        <label>Quiet until <input id="quietEndInput" type="time" /></label>
+        <label>Snooze length (minutes) <input id="snoozeMinutesInput" type="number" min="1" max="120" /></label>
       </div>
 
       <h3 class="settings-h">Window &amp; lookups</h3>

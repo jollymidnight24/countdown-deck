@@ -57,7 +57,11 @@ const DEFAULT_SETTINGS = {
   uiFont: 'system',      // font family key
   uiScale: 1,            // overall UI zoom factor
   dashboardBg: 'preset:nebula', // dashboard background spec
-  dnd: false             // Do Not Disturb: mute all alerts
+  dnd: false,            // Do Not Disturb: mute all alerts
+  quietHoursEnabled: false,
+  quietStart: '22:00',
+  quietEnd: '07:00',
+  snoozeMinutes: 5
 };
 
 function loadSettings() {

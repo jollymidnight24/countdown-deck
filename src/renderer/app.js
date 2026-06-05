@@ -8,9 +8,11 @@ let settings = {
   theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '',
   trayMode: 'soonest', trayId: '', trayCycleSecs: 6,
   dateFormat: 'system', clock: 'auto', timeZone: '',
-  uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula', dnd: false
+  uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula', dnd: false,
+  quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5
 };
 let lastTraySig = '';
+let focusId = null;
 let editingId = null;
 let dragId = null;
 let tickHandle = null;
@@ -179,6 +181,23 @@ function nextSessionMs(ex, sessionKey, fromMs) {
   }
   return NaN;
 }
+// Most recent past occurrence of a session (used as the progress-bar start).
+function prevSessionMs(ex, sessionKey, fromMs) {
+  if (!ex || !ex.sessions[sessionKey]) return NaN;
+  const z = getZoned(new Date(fromMs), ex.tz);
+  let y = z.y, mo = z.mo, d = z.d;
+  for (let i = 0; i < 400; i++) {
+    if (isTradingDay(y, mo, d, ex)) {
+      const [sh, sm] = sessionTimeFor(ex, sessionKey, y, mo, d).split(':').map(Number);
+      const inst = wallToUtc(y, mo, d, sh, sm, ex.tz);
+      if (inst < fromMs) return inst;
+    }
+    const nx = new Date(Date.UTC(y, mo - 1, d));
+    nx.setUTCDate(nx.getUTCDate() - 1);
+    y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; d = nx.getUTCDate();
+  }
+  return NaN;
+}
 
 // ===========================================================================
 // DOM refs
@@ -212,6 +231,11 @@ const alertSoundInput = $('alertSoundInput');
 const alertSoundFile = $('alertSoundFile');
 const alertBannerInput = $('alertBannerInput');
 const alertFlashInput = $('alertFlashInput');
+const msInputs = { 1440: $('ms1440'), 60: $('ms60'), 10: $('ms10') };
+const quietEnabledInput = $('quietEnabledInput');
+const quietStartInput = $('quietStartInput');
+const quietEndInput = $('quietEndInput');
+const snoozeMinutesInput = $('snoozeMinutesInput');
 
 // settings modal
 const settingsModal = $('settingsModal');
@@ -254,7 +278,9 @@ function normalize(c) {
     fontScale: Number(c.fontScale) || 1,
     alertSound: c.alertSound || 'none',
     alertBanner: c.alertBanner !== false,   // default on (preserves prior behavior)
-    alertFlash: !!c.alertFlash
+    alertFlash: !!c.alertFlash,
+    milestones: Array.isArray(c.milestones) ? c.milestones : [],   // minutes-before-end reminders
+    createdAt: c.createdAt || Date.now()
   };
 }
 
@@ -294,6 +320,41 @@ function breakdown(c, nowMs) {
   if (!isFinite(diff)) return { done: false, mode: 'down', d: 0, h: 0, m: 0, s: 0 };
   if (diff <= 0) return { done: true, mode: 'down', d: 0, h: 0, m: 0, s: 0 };
   return Object.assign({ done: false, mode: 'down' }, unitsFromMs(diff));
+}
+
+// Fraction elapsed (0..1) toward the target, or null if not applicable.
+function progressStart(c, target) {
+  if (c.kind === 'trading') {
+    const p = prevSessionMs(exchangeById(c.exchange), c.session, Date.now());
+    return isFinite(p) ? p : null;
+  }
+  if (c.recurrence !== 'none') {
+    const d = new Date(target);
+    if (c.recurrence === 'weekly') d.setDate(d.getDate() - 7);
+    else if (c.recurrence === 'monthly') d.setMonth(d.getMonth() - 1);
+    else d.setFullYear(d.getFullYear() - 1);
+    return d.getTime();
+  }
+  return new Date(c.createdAt || Date.now()).getTime();
+}
+function progressFraction(c, nowMs) {
+  if (c.mode !== 'down') return null;
+  const target = effectiveTargetMs(c, nowMs);
+  if (!isFinite(target)) return null;
+  const start = progressStart(c, target);
+  if (start == null || target <= start) return null;
+  return Math.min(1, Math.max(0, (nowMs - start) / (target - start)));
+}
+
+// Quiet hours
+function hhmmToMin(s) { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
+function isQuietNow() {
+  if (!settings.quietHoursEnabled) return false;
+  const d = new Date();
+  const cur = d.getHours() * 60 + d.getMinutes();
+  const s = hhmmToMin(settings.quietStart), e = hhmmToMin(settings.quietEnd);
+  if (s === e) return false;
+  return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
 }
 
 function fmtOptions() {
@@ -420,7 +481,8 @@ function render() {
         <div class="unit"><div class="num" data-u="m">--</div><div class="lbl">Min</div></div>
         <div class="unit"><div class="num" data-u="s">--</div><div class="lbl">Sec</div></div>
       </div>
-      <div class="done-banner hidden">🎉 It's here!</div>`;
+      <div class="done-banner hidden">🎉 It's here!</div>
+      <div class="card-progress"><div class="card-progress-fill"></div></div>`;
 
     card.querySelector('.t-text').textContent = c.title;
     card.querySelector('.t-target').textContent = formatTarget(c);
@@ -499,6 +561,22 @@ function tick() {
       }
     }
 
+    // Milestone (pre-end) reminders --------------------------------------
+    if (c.mode === 'down' && c.milestones && c.milestones.length) {
+      const occ = effectiveTargetMs(c, now);
+      const remMin = (occ - now) / 60000;
+      if (c._msOcc !== occ) {                       // new occurrence: re-arm
+        c._msOcc = occ; c._msFired = {};
+        for (const m of c.milestones) if (remMin <= m) c._msFired[m] = true; // skip already-passed
+      }
+      for (const m of c.milestones) {
+        if (!c._msFired[m] && remMin > 0 && remMin <= m) {
+          c._msFired[m] = true;
+          fireMilestone(c, m);
+        }
+      }
+    }
+
     // DOM update ---------------------------------------------------------
     const card = grid.querySelector(`.card[data-id="${c.id}"]`);
     if (!card) continue;
@@ -509,11 +587,41 @@ function tick() {
     card.querySelector('[data-u="h"]').textContent = pad(b.h);
     card.querySelector('[data-u="m"]').textContent = pad(b.m);
     card.querySelector('[data-u="s"]').textContent = pad(b.s);
+
+    const frac = progressFraction(c, now);
+    const bar = card.querySelector('.card-progress');
+    if (frac == null) { bar.style.display = 'none'; }
+    else { bar.style.display = ''; card.querySelector('.card-progress-fill').style.width = (frac * 100).toFixed(1) + '%'; }
   }
 
+  if (focusId) updateFocus(now);
   if (changed) persist();
   updateTray(now);
   tickCount++;
+}
+
+// ===========================================================================
+// Focus mode (single countdown, full screen)
+// ===========================================================================
+function openFocus(id) {
+  const c = countdowns.find((x) => x.id === id);
+  if (!c) return;
+  focusId = id;
+  $('focusTitle').textContent = c.title;
+  $('focusTitle').style.color = c.color || '';
+  $('focusOverlay').classList.remove('hidden');
+  updateFocus(Date.now());
+}
+function closeFocus() { focusId = null; $('focusOverlay').classList.add('hidden'); }
+function updateFocus(now) {
+  const c = countdowns.find((x) => x.id === focusId);
+  if (!c) { closeFocus(); return; }
+  const b = breakdown(c, now);
+  $('focusOverlay').querySelector('[data-fu="d"]').textContent = String(b.d);
+  $('focusOverlay').querySelector('[data-fu="h"]').textContent = pad(b.h);
+  $('focusOverlay').querySelector('[data-fu="m"]').textContent = pad(b.m);
+  $('focusOverlay').querySelector('[data-fu="s"]').textContent = pad(b.s);
+  $('focusTarget').textContent = formatTarget(c);
 }
 
 // Active (still-counting-down) entries, soonest first.
@@ -619,6 +727,7 @@ function showFlash(c) {
   const o = $('flashOverlay');
   flashCountdownId = c.id;
   $('flashTitle').textContent = c.title;
+  $('flashSnooze').textContent = `Snooze ${Math.round(snoozeMs() / 60000)} min`;
   o.style.setProperty('--flash-color', c.color || '#5b8cff');
   o.classList.remove('hidden');
   if (flashTimer) clearTimeout(flashTimer);
@@ -630,16 +739,26 @@ function dismissFlash() {
   flashCountdownId = null;
   stopSound();
 }
+function snoozeMs() { return Math.min(120, Math.max(1, Number(settings.snoozeMinutes) || 5)) * 60000; }
 function snoozeFlash() {
   const c = countdowns.find((x) => x.id === flashCountdownId);
   dismissFlash();
-  if (c) setTimeout(() => fireAlerts(c, { snooze: true }), SNOOZE_MS);
+  if (c) setTimeout(() => fireAlerts(c, { snooze: true }), snoozeMs());
+}
+
+// A gentle pre-end reminder (banner only), respecting DND / quiet hours.
+function fireMilestone(c, minutes) {
+  if (settings.dnd || isQuietNow()) return;
+  const label = minutes >= 1440 ? `${Math.round(minutes / 1440)} day${minutes >= 2880 ? 's' : ''}`
+    : minutes >= 60 ? `${Math.round(minutes / 60)} hour${minutes >= 120 ? 's' : ''}`
+      : `${minutes} minutes`;
+  window.api.notify(`${label} left`, c.title);
 }
 
 // Fire the alerts a countdown is configured for (banner / sound / flash).
-// `test` bypasses Do Not Disturb; otherwise DND suppresses everything.
+// `test` bypasses Do Not Disturb and quiet hours; otherwise both suppress.
 function fireAlerts(c, opts = {}) {
-  if (settings.dnd && !opts.test) return;
+  if ((settings.dnd || isQuietNow()) && !opts.test) return;
   if (c.alertBanner !== false || opts.test) {
     const title = c.kind === 'trading' ? 'Trading session' : (c.recurrence !== 'none' ? 'Recurring countdown' : 'Countdown reached!');
     const suffix = opts.snooze ? ' (snoozed)' : '';
@@ -847,6 +966,7 @@ function openModal(editId = null) {
     alertSoundInput.value = c.alertSound || 'none';
     alertBannerInput.checked = c.alertBanner !== false;
     alertFlashInput.checked = !!c.alertFlash;
+    for (const m of [1440, 60, 10]) msInputs[m].checked = (c.milestones || []).includes(m);
   } else {
     modalTitle.textContent = 'Add countdown';
     form.reset();
@@ -862,6 +982,7 @@ function openModal(editId = null) {
     alertSoundInput.value = 'none';
     alertBannerInput.checked = true;
     alertFlashInput.checked = false;
+    for (const m of [1440, 60, 10]) msInputs[m].checked = false;
   }
   syncKindFields();
   modal.classList.remove('hidden');
@@ -884,7 +1005,8 @@ function saveFromForm(evt) {
     fontScale: Number(fontScaleInput.value) || 1,
     alertSound: soundValueOrNone(alertSoundInput.value),
     alertBanner: alertBannerInput.checked,
-    alertFlash: alertFlashInput.checked
+    alertFlash: alertFlashInput.checked,
+    milestones: [1440, 60, 10].filter((m) => msInputs[m].checked)
   };
 
   let data;
@@ -914,7 +1036,7 @@ function saveFromForm(evt) {
 
   if (editingId) {
     const c = countdowns.find((x) => x.id === editingId);
-    Object.assign(c, data, { notified: false, lastOcc: null });
+    Object.assign(c, data, { notified: false, lastOcc: null, _msOcc: null, _msFired: {} });
   } else {
     countdowns.push(normalize(data));
   }
@@ -1038,6 +1160,12 @@ function openSettings() {
   clockInput.value = settings.clock || 'auto';
   timeZoneInput.value = settings.timeZone || '';
 
+  // Alerts (quiet hours + snooze)
+  quietEnabledInput.checked = !!settings.quietHoursEnabled;
+  quietStartInput.value = settings.quietStart || '22:00';
+  quietEndInput.value = settings.quietEnd || '07:00';
+  snoozeMinutesInput.value = settings.snoozeMinutes || 5;
+
   // Tray picker
   const opts = countdowns.filter((c) => c.mode === 'down');
   trayIdInput.innerHTML = opts.length
@@ -1064,6 +1192,10 @@ function saveSettings() {
   settings.dateFormat = dateFormatInput.value;
   settings.clock = clockInput.value;
   settings.timeZone = timeZoneInput.value || '';
+  settings.quietHoursEnabled = quietEnabledInput.checked;
+  settings.quietStart = quietStartInput.value || '22:00';
+  settings.quietEnd = quietEndInput.value || '07:00';
+  settings.snoozeMinutes = Math.min(120, Math.max(1, Number(snoozeMinutesInput.value) || 5));
   persistSettings();
 
   window.api.setAlwaysOnTop(settings.alwaysOnTop);
@@ -1238,6 +1370,8 @@ async function init() {
     persistSettings(); applyDnd();
   });
   $('flashSnooze').addEventListener('click', snoozeFlash);
+  $('focusClose').addEventListener('click', closeFocus);
+  $('focusOverlay').addEventListener('click', (e) => { if (e.target.id === 'focusOverlay') closeFocus(); });
 
   // add/edit modal
   $('cancelBtn').addEventListener('click', closeModal);
@@ -1278,7 +1412,11 @@ async function init() {
   // card actions
   grid.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
+    if (!btn) {
+      const card = e.target.closest('.card');
+      if (card) openFocus(card.dataset.id);   // click card body → focus mode
+      return;
+    }
     const id = btn.closest('.card').dataset.id;
     if (btn.dataset.action === 'edit') openModal(id);
     else if (btn.dataset.action === 'remove') removeCountdown(id);
@@ -1289,7 +1427,7 @@ async function init() {
 
   // overlays
   for (const m of [modal, settingsModal]) m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); closeFocus(); } });
 
   // updates
   window.api.onUpdateStatus(handleUpdateStatus);
