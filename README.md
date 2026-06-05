@@ -9,7 +9,7 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Count-up mode** — track time *elapsed since* an event, not just time remaining.
 - **Recurring** countdowns (weekly / monthly / yearly) that automatically roll forward to the next occurrence.
 - **Pin** important countdowns to the top, **drag to reorder**, **search**, **sort** (soonest / name / manual), and **filter by category**.
-- **Desktop notifications** when a countdown reaches zero (and when a recurring one rolls over).
+- **End-of-countdown alerts**, chosen per countdown — any combination of a **sound** (six built-in alarm tones, or your own uploaded audio), a **banner notification**, and a **full-screen flash**. Each countdown can use one, several, or all at once.
 - **Light / dark theme** toggle.
 - **Menu-bar / system-tray view** with your choice of what to show: the **soonest** countdown, a **specific** one you pick, or **cycle** through them all at an interval you set. Plus an optional **always-on-top** window.
 - **Auto-find dates** — search a movie or TV show and the app fills in the real date automatically. **TV shows use [TVmaze](https://www.tvmaze.com/api)** (free, no key) to get the next episode's **exact air time including timezone** (e.g. a 9:00 PM ET premiere lands precisely). **Movies use TMDB** release dates (needs a free key). Manual entry always remains available.
@@ -27,6 +27,12 @@ US exchanges (NYSE/Nasdaq) skip weekends **and** market holidays. The holiday ca
 The day after Thanksgiving, etc., will show "early close" in the card. The whole calendar lives in `usCalendar()` in `src/renderer/app.js` if you ever need to tweak a rule.
 
 A few **one-click trading presets** (NYSE open/close, LSE open, TSE open) appear as quick-add chips on the empty dashboard and in the Add dialog.
+
+### Alerts
+
+In the Add/Edit dialog, "Alerts when it ends" lets each countdown independently turn on a sound, a banner notification, and/or a full-screen flash. The six built-in sounds (Beep, Digital alarm, Chime, Bell, Radar, Pulse) are **synthesized at runtime with the Web Audio API** — no audio files are bundled, nothing to license, and it works offline. You can also upload your own MP3/WAV/OGG (stored like other media via the `cdmedia://` protocol). Use **Preview** to audition a sound while configuring. The flash overlay shows the countdown's title in its accent color, auto-dismisses after a few seconds (or on click / Esc), and honors "reduce motion." It also has a **Snooze 5 min** button that re-fires the alert after five minutes. Recurring and trading-session countdowns fire the same alerts each time they roll over.
+
+Each card has a **🔔 test button** that previews its configured alerts on demand (this bypasses Do Not Disturb). The toolbar's **bell toggle** is a global **Do Not Disturb** — when on, all end-of-countdown alerts (sound, banner, flash) are muted until you turn it back off; the icon turns to 🔕 and is highlighted.
 
 ### Backgrounds & uploads
 

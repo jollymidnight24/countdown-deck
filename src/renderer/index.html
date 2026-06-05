@@ -12,6 +12,19 @@
   <!-- Dashboard background layer (image / animation) -->
   <div id="bgLayer"><canvas id="bgCanvas"></canvas></div>
 
+  <!-- Full-screen end-of-countdown flash -->
+  <div id="flashOverlay" class="hidden">
+    <div class="flash-card">
+      <div class="flash-emoji">⏰</div>
+      <div class="flash-title" id="flashTitle"></div>
+      <div class="flash-sub">Time's up!</div>
+      <div class="flash-actions">
+        <button id="flashSnooze" class="btn ghost">Snooze 5 min</button>
+        <button id="flashDismiss" class="btn primary">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
   <header class="topbar">
     <div class="brand">
       <span class="logo">&#9203;</span>
@@ -28,6 +41,7 @@
       <select id="categoryFilter" class="select" title="Filter by category">
         <option value="">All categories</option>
       </select>
+      <button id="dndBtn" class="btn ghost icon-btn" title="Mute all alerts (Do Not Disturb)">&#128276;</button>
       <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
       <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
       <button id="addBtn" class="btn primary">+ Add</button>
@@ -118,6 +132,23 @@
             <input id="colorInput" type="color" value="#5b8cff" />
           </label>
         </div>
+
+        <fieldset class="appearance">
+          <legend>Alerts when it ends</legend>
+          <div class="form-grid">
+            <label>Sound
+              <select id="alertSoundInput"></select>
+            </label>
+            <label>&nbsp;
+              <button type="button" id="alertPreviewBtn" class="btn ghost" style="width:100%">▶ Preview sound</button>
+            </label>
+            <label id="alertUploadWrap" class="hidden">Upload sound (mp3/wav/ogg)
+              <input id="alertSoundFile" type="file" accept="audio/*" />
+            </label>
+          </div>
+          <label class="switch-row"><span>Banner notification</span><input id="alertBannerInput" type="checkbox" checked /></label>
+          <label class="switch-row"><span>Full-screen flash</span><input id="alertFlashInput" type="checkbox" /></label>
+        </fieldset>
 
         <fieldset class="appearance">
           <legend>Appearance for this countdown</legend>

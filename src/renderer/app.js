@@ -8,7 +8,7 @@ let settings = {
   theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '',
   trayMode: 'soonest', trayId: '', trayCycleSecs: 6,
   dateFormat: 'system', clock: 'auto', timeZone: '',
-  uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula'
+  uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula', dnd: false
 };
 let lastTraySig = '';
 let editingId = null;
@@ -208,6 +208,10 @@ const bgInput = $('bgInput');
 const fontInput = $('fontInput');
 const fontScaleInput = $('fontScaleInput');
 const bgFile = $('bgFile');
+const alertSoundInput = $('alertSoundInput');
+const alertSoundFile = $('alertSoundFile');
+const alertBannerInput = $('alertBannerInput');
+const alertFlashInput = $('alertFlashInput');
 
 // settings modal
 const settingsModal = $('settingsModal');
@@ -247,7 +251,10 @@ function normalize(c) {
     lastOcc: c.lastOcc || null,
     bg: c.bg || 'auto',
     fontFamily: c.fontFamily || '',
-    fontScale: Number(c.fontScale) || 1
+    fontScale: Number(c.fontScale) || 1,
+    alertSound: c.alertSound || 'none',
+    alertBanner: c.alertBanner !== false,   // default on (preserves prior behavior)
+    alertFlash: !!c.alertFlash
   };
 }
 
@@ -401,6 +408,7 @@ function render() {
           </div>
         </div>
         <div class="card-menu">
+          <button class="btn ghost tiny" data-action="test" title="Test this countdown's alerts">🔔</button>
           <button class="btn ghost tiny" data-action="pin">${c.pinned ? 'Unpin' : 'Pin'}</button>
           <button class="btn ghost tiny" data-action="edit">Edit</button>
           <button class="btn ghost tiny" data-action="remove">✕</button>
@@ -477,19 +485,17 @@ function tick() {
     if (c.mode === 'down' && !isRolling) {
       if (b.done && !c.notified) {
         c.notified = true; changed = true;
-        window.api.notify('Countdown reached!', `${c.title} is here.`);
+        fireAlerts(c);
       } else if (!b.done && c.notified) {
         c.notified = false; changed = true; // target moved into the future via edit
       }
     } else if (isRolling) {
       const occ = effectiveTargetMs(c, now);
       if (c.lastOcc == null) {
-        c.lastOcc = occ; changed = true;
+        c.lastOcc = occ; changed = true;          // first observation: arm without alerting
       } else if (occ !== c.lastOcc) {
         c.lastOcc = occ; changed = true;
-        const msg = c.kind === 'trading' ? `${c.title} just happened. Counting down to the next session.`
-          : `${c.title} just occurred. Next one is counting down.`;
-        window.api.notify(c.kind === 'trading' ? 'Trading session' : 'Recurring countdown', msg);
+        fireAlerts(c);
       }
     }
 
@@ -560,6 +566,89 @@ function refreshCategoryControls() {
 // Media + appearance helpers
 // ===========================================================================
 const mediaUrl = (file) => (file ? `cdmedia://media/${file}` : '');
+
+// ===========================================================================
+// Alarm sounds (Web Audio synth — no bundled files) + uploads + flash
+// ===========================================================================
+const SOUND_LABELS = { none: 'None (silent)', beep: 'Beep', digital: 'Digital alarm', chime: 'Chime', bell: 'Bell', radar: 'Radar', pulse: 'Pulse' };
+let _ac = null;
+let _currentAudio = null;
+function audioCtx() {
+  if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+function tone(ctx, freq, start, dur, type, peak) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  o.connect(g); g.connect(ctx.destination);
+  const t = ctx.currentTime + start;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak || 0.25, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+function playBuiltin(id) {
+  const ctx = audioCtx();
+  if (id === 'beep') { for (let i = 0; i < 6; i++) tone(ctx, 880, i * 0.32, 0.18, 'square', 0.2); }
+  else if (id === 'digital') { for (let r = 0; r < 3; r++) for (let i = 0; i < 4; i++) tone(ctx, 1175, r * 0.7 + i * 0.11, 0.07, 'triangle', 0.18); }
+  else if (id === 'chime') { [659, 587, 440].forEach((f, i) => tone(ctx, f, i * 0.42, 0.6, 'sine', 0.3)); }
+  else if (id === 'bell') { for (let r = 0; r < 2; r++) { tone(ctx, 660, r * 1.1, 1.1, 'sine', 0.3); tone(ctx, 1320, r * 1.1, 1.0, 'sine', 0.12); } }
+  else if (id === 'radar') { for (let r = 0; r < 3; r++) { tone(ctx, 500, r * 0.55, 0.22, 'sawtooth', 0.16); tone(ctx, 760, r * 0.55 + 0.18, 0.22, 'sawtooth', 0.16); } }
+  else if (id === 'pulse') { for (let i = 0; i < 5; i++) tone(ctx, i % 2 ? 784 : 587, i * 0.26, 0.2, 'square', 0.18); }
+}
+function stopSound() {
+  if (_currentAudio) { try { _currentAudio.pause(); } catch (_) {} _currentAudio = null; }
+}
+function playSound(spec) {
+  if (!spec || spec === 'none') return;
+  stopSound();
+  if (spec.startsWith('media:')) {
+    const url = mediaUrl(spec.slice(6));
+    if (url) { _currentAudio = new Audio(url); _currentAudio.play().catch(() => {}); }
+  } else {
+    playBuiltin(spec);
+  }
+}
+
+let flashTimer = null;
+let flashCountdownId = null;
+const SNOOZE_MS = 5 * 60 * 1000;
+
+function showFlash(c) {
+  const o = $('flashOverlay');
+  flashCountdownId = c.id;
+  $('flashTitle').textContent = c.title;
+  o.style.setProperty('--flash-color', c.color || '#5b8cff');
+  o.classList.remove('hidden');
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(dismissFlash, 12000);
+}
+function dismissFlash() {
+  $('flashOverlay').classList.add('hidden');
+  if (flashTimer) { clearTimeout(flashTimer); flashTimer = null; }
+  flashCountdownId = null;
+  stopSound();
+}
+function snoozeFlash() {
+  const c = countdowns.find((x) => x.id === flashCountdownId);
+  dismissFlash();
+  if (c) setTimeout(() => fireAlerts(c, { snooze: true }), SNOOZE_MS);
+}
+
+// Fire the alerts a countdown is configured for (banner / sound / flash).
+// `test` bypasses Do Not Disturb; otherwise DND suppresses everything.
+function fireAlerts(c, opts = {}) {
+  if (settings.dnd && !opts.test) return;
+  if (c.alertBanner !== false || opts.test) {
+    const title = c.kind === 'trading' ? 'Trading session' : (c.recurrence !== 'none' ? 'Recurring countdown' : 'Countdown reached!');
+    const suffix = opts.snooze ? ' (snoozed)' : '';
+    const body = (c.kind === 'trading' ? `${c.title} — session time.` : `${c.title} is here.`) + suffix;
+    if (c.alertBanner !== false) window.api.notify(title, body);
+  }
+  if (c.alertSound && c.alertSound !== 'none') playSound(c.alertSound);
+  if (c.alertFlash || opts.test) showFlash(c);
+}
 
 function applyUiFont() { document.body.style.setProperty('--ui-font', FONTS[settings.uiFont] || FONTS.system); }
 function applyUiScale() { window.api.setZoom(Number(settings.uiScale) || 1); }
@@ -653,6 +742,13 @@ function buildFontSelect(sel, includeInherit) {
   sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${escapeHtml(t)}</option>`).join('');
 }
 
+function buildSoundSelect(sel) {
+  const builtins = ['none', 'beep', 'digital', 'chime', 'bell', 'radar', 'pulse'];
+  sel.innerHTML = builtins.map((k) => `<option value="${k}">${SOUND_LABELS[k]}</option>`).join('') +
+    '<option value="upload">Upload sound…</option>';
+}
+const soundValueOrNone = (v) => (v === 'upload' ? 'none' : v);
+
 function buildTimeZoneSelect(sel) {
   const zones = ['', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Kolkata', 'Asia/Hong_Kong', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney', 'UTC'];
   sel.innerHTML = zones.map((z) => `<option value="${z}">${z ? z.replace('_', ' ') : 'Local (this computer)'}</option>`).join('');
@@ -716,8 +812,10 @@ function openModal(editId = null) {
   $('tmdbQuery').value = '';
   buildBgSelect(bgInput, { includeAuto: true });
   buildFontSelect(fontInput, true);
+  buildSoundSelect(alertSoundInput);
   buildExchangeSelect();
   $('bgUploadWrap').classList.add('hidden');
+  $('alertUploadWrap').classList.add('hidden');
 
   if (editId) {
     const c = countdowns.find((x) => x.id === editId);
@@ -741,6 +839,14 @@ function openModal(editId = null) {
     bgInput.value = c.bg || 'auto';
     fontInput.value = c.fontFamily || '';
     fontScaleInput.value = String(c.fontScale || 1);
+    if (c.alertSound && c.alertSound.startsWith('media:')) {
+      const o = document.createElement('option');
+      o.value = c.alertSound; o.textContent = 'Current uploaded sound';
+      alertSoundInput.appendChild(o);
+    }
+    alertSoundInput.value = c.alertSound || 'none';
+    alertBannerInput.checked = c.alertBanner !== false;
+    alertFlashInput.checked = !!c.alertFlash;
   } else {
     modalTitle.textContent = 'Add countdown';
     form.reset();
@@ -753,13 +859,16 @@ function openModal(editId = null) {
     bgInput.value = 'auto';
     fontInput.value = '';
     fontScaleInput.value = '1';
+    alertSoundInput.value = 'none';
+    alertBannerInput.checked = true;
+    alertFlashInput.checked = false;
   }
   syncKindFields();
   modal.classList.remove('hidden');
   titleInput.focus();
 }
 
-function closeModal() { modal.classList.add('hidden'); editingId = null; }
+function closeModal() { modal.classList.add('hidden'); editingId = null; stopSound(); }
 
 function bgValueOrDefault(v) { return v === 'upload' ? 'auto' : v; }
 
@@ -772,7 +881,10 @@ function saveFromForm(evt) {
   const appearance = {
     bg: bgValueOrDefault(bgInput.value),
     fontFamily: fontInput.value,
-    fontScale: Number(fontScaleInput.value) || 1
+    fontScale: Number(fontScaleInput.value) || 1,
+    alertSound: soundValueOrNone(alertSoundInput.value),
+    alertBanner: alertBannerInput.checked,
+    alertFlash: alertFlashInput.checked
   };
 
   let data;
@@ -885,6 +997,13 @@ function wireDrag() {
 function applyTheme() {
   document.body.dataset.theme = settings.theme;
   $('themeBtn').innerHTML = settings.theme === 'dark' ? '&#9788;' : '&#9790;'; // sun / moon
+}
+
+function applyDnd() {
+  const btn = $('dndBtn');
+  btn.innerHTML = settings.dnd ? '&#128277;' : '&#128276;'; // 🔕 muted / 🔔 active
+  btn.classList.toggle('active', settings.dnd);
+  btn.title = settings.dnd ? 'Alerts muted (Do Not Disturb) — click to unmute' : 'Mute all alerts (Do Not Disturb)';
 }
 
 function syncTrayWraps() {
@@ -1082,6 +1201,7 @@ async function init() {
 
   $('versionTag').textContent = 'v' + version;
   applyTheme();
+  applyDnd();
   applyUiFont();
   applyUiScale();
   applyDashboardBg();
@@ -1113,6 +1233,11 @@ async function init() {
     settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
     persistSettings(); applyTheme();
   });
+  $('dndBtn').addEventListener('click', () => {
+    settings.dnd = !settings.dnd;
+    persistSettings(); applyDnd();
+  });
+  $('flashSnooze').addEventListener('click', snoozeFlash);
 
   // add/edit modal
   $('cancelBtn').addEventListener('click', closeModal);
@@ -1127,6 +1252,14 @@ async function init() {
     if (bgInput.value === 'upload') bgFile.click();
   });
   bgFile.addEventListener('change', () => handleMediaPick(bgFile, bgInput, $('bgUploadWrap')));
+  alertSoundInput.addEventListener('change', () => {
+    $('alertUploadWrap').classList.toggle('hidden', alertSoundInput.value !== 'upload');
+    if (alertSoundInput.value === 'upload') alertSoundFile.click();
+    else playSound(soundValueOrNone(alertSoundInput.value));   // audition on pick
+  });
+  alertSoundFile.addEventListener('change', () => handleMediaPick(alertSoundFile, alertSoundInput, $('alertUploadWrap')));
+  $('alertPreviewBtn').addEventListener('click', () => playSound(soundValueOrNone(alertSoundInput.value)));
+  $('flashDismiss').addEventListener('click', dismissFlash);
 
   // settings modal
   $('settingsBtn').addEventListener('click', openSettings);
@@ -1150,12 +1283,13 @@ async function init() {
     if (btn.dataset.action === 'edit') openModal(id);
     else if (btn.dataset.action === 'remove') removeCountdown(id);
     else if (btn.dataset.action === 'pin') togglePin(id);
+    else if (btn.dataset.action === 'test') { const c = countdowns.find((x) => x.id === id); if (c) fireAlerts(c, { test: true }); }
   });
   wireDrag();
 
   // overlays
   for (const m of [modal, settingsModal]) m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); } });
 
   // updates
   window.api.onUpdateStatus(handleUpdateStatus);

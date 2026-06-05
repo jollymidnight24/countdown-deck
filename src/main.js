@@ -56,7 +56,8 @@ const DEFAULT_SETTINGS = {
   timeZone: '',          // '' = local, else an IANA timezone
   uiFont: 'system',      // font family key
   uiScale: 1,            // overall UI zoom factor
-  dashboardBg: 'preset:nebula' // dashboard background spec
+  dashboardBg: 'preset:nebula', // dashboard background spec
+  dnd: false             // Do Not Disturb: mute all alerts
 };
 
 function loadSettings() {
@@ -91,7 +92,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required'  // let alarm sounds play on timer
     }
   });
 
