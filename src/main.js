@@ -39,7 +39,10 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
   sort: 'manual',
   alwaysOnTop: false,
-  tmdbApiKey: ''
+  tmdbApiKey: '',
+  trayMode: 'soonest',   // 'soonest' | 'specific' | 'cycle'
+  trayId: '',            // id of the countdown when trayMode === 'specific'
+  trayCycleSecs: 6       // seconds per item when trayMode === 'cycle'
 };
 
 function loadSettings() {
@@ -110,7 +113,7 @@ function createTray() {
   }
   tray.setToolTip('Countdown Deck');
   tray.on('click', showWindow);
-  updateTray([]);
+  updateTray({});
 }
 
 function showWindow() {
@@ -120,53 +123,116 @@ function showWindow() {
   mainWindow.focus();
 }
 
-function updateTray(summaries) {
+function updateTray(payload) {
   if (!tray) return;
-  const items = (summaries || []).slice(0, 8).map((s) => ({ label: s, enabled: false }));
+  const p = payload || {};
+  const labels = Array.isArray(p.items) ? p.items : [];
+  const menuItems = labels.slice(0, 8).map((s) => ({ label: s, enabled: false }));
   const template = [
     { label: 'Show Countdown Deck', click: showWindow },
     { type: 'separator' },
-    ...(items.length ? items : [{ label: 'No countdowns', enabled: false }]),
+    ...(menuItems.length ? menuItems : [{ label: 'No countdowns', enabled: false }]),
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
   if (process.platform === 'darwin' && tray.setTitle) {
-    tray.setTitle(summaries && summaries.length ? ' ' + summaries[0] : '');
+    tray.setTitle(p.title ? ' ' + p.title : '');
   }
 }
 
 // ---------------------------------------------------------------------------
 // TMDB lookup (done in main to avoid CORS and keep the key out of the page)
 // ---------------------------------------------------------------------------
-function tmdbSearch(query) {
+function httpsJSON(url) {
   return new Promise((resolve) => {
-    const key = loadSettings().tmdbApiKey;
-    if (!key) return resolve({ error: 'no-key' });
-    const url = `https://api.themoviedb.org/3/search/multi?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&include_adult=false`;
     https.get(url, (res) => {
       let body = '';
       res.on('data', (c) => (body += c));
       res.on('end', () => {
-        if (res.statusCode !== 200) return resolve({ error: 'http-' + res.statusCode });
-        try {
-          const json = JSON.parse(body);
-          const results = (json.results || [])
-            .filter((r) => r.media_type === 'movie' || r.media_type === 'tv')
-            .map((r) => ({
-              title: r.title || r.name,
-              date: r.release_date || r.first_air_date || '',
-              type: r.media_type,
-              overview: (r.overview || '').slice(0, 140)
-            }))
-            .filter((r) => r.title);
-          resolve({ results });
-        } catch (_) {
-          resolve({ error: 'parse' });
-        }
+        if (res.statusCode !== 200) return resolve({ __error: 'http-' + res.statusCode });
+        try { resolve(JSON.parse(body)); } catch (_) { resolve({ __error: 'parse' }); }
       });
-    }).on('error', () => resolve({ error: 'network' }));
+    }).on('error', () => resolve({ __error: 'network' }));
   });
+}
+
+async function tmdbSearch(query) {
+  const key = loadSettings().tmdbApiKey;
+  if (!key) return { error: 'no-key' };
+  const json = await httpsJSON(
+    `https://api.themoviedb.org/3/search/multi?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&include_adult=false`
+  );
+  if (json.__error) return { error: json.__error };
+  const results = (json.results || [])
+    .filter((r) => r.media_type === 'movie' || r.media_type === 'tv')
+    .map((r) => ({
+      id: r.id,
+      title: r.title || r.name,
+      date: r.release_date || r.first_air_date || '',
+      type: r.media_type,
+      overview: (r.overview || '').slice(0, 140)
+    }))
+    .filter((r) => r.title);
+  return { results };
+}
+
+// Fetch the actual next date for a chosen title: a TV show's next episode to
+// air (or first-air fallback), or a movie's release date.
+async function tmdbDetail(type, id) {
+  const key = loadSettings().tmdbApiKey;
+  if (!key) return { error: 'no-key' };
+  if (type !== 'tv' && type !== 'movie') return { error: 'bad-type' };
+  const data = await httpsJSON(`https://api.themoviedb.org/3/${type}/${id}?api_key=${encodeURIComponent(key)}`);
+  if (data.__error) return { error: data.__error };
+  if (type === 'movie') return { type, name: data.title, date: data.release_date || '' };
+  const ne = data.next_episode_to_air;
+  const le = data.last_episode_to_air;
+  return {
+    type,
+    name: data.name,
+    status: data.status,
+    firstAir: data.first_air_date || '',
+    next: ne ? { date: ne.air_date, season: ne.season_number, episode: ne.episode_number, epName: ne.name } : null,
+    last: le ? { date: le.air_date, season: le.season_number, episode: le.episode_number } : null
+  };
+}
+
+// ---------------------------------------------------------------------------
+// TVmaze lookup (free, no API key) — gives exact episode air times.
+// ---------------------------------------------------------------------------
+async function tvmazeSearch(query) {
+  const json = await httpsJSON(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`);
+  if (json && json.__error) return { error: json.__error };
+  const results = (Array.isArray(json) ? json : [])
+    .map((x) => x.show)
+    .filter(Boolean)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      premiered: s.premiered || '',
+      status: s.status || '',
+      network: (s.network && s.network.name) || (s.webChannel && s.webChannel.name) || ''
+    }));
+  return { results };
+}
+
+// The next upcoming episode for a show, including its precise airstamp
+// (ISO 8601 with timezone offset, e.g. 2026-06-21T21:00:00-04:00).
+async function tvmazeNext(showId) {
+  const eps = await httpsJSON(`https://api.tvmaze.com/shows/${encodeURIComponent(showId)}/episodes?specials=0`);
+  if (eps && eps.__error) return { error: eps.__error };
+  const list = (Array.isArray(eps) ? eps : [])
+    .filter((e) => e.airstamp && !isNaN(new Date(e.airstamp).getTime()));
+  const now = Date.now();
+  const upcoming = list
+    .filter((e) => new Date(e.airstamp).getTime() > now)
+    .sort((a, b) => new Date(a.airstamp) - new Date(b.airstamp));
+  if (upcoming.length) {
+    const e = upcoming[0];
+    return { airstamp: e.airstamp, season: e.season, episode: e.number, epName: e.name };
+  }
+  return { none: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +250,9 @@ ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('window:setAlwaysOnTop', (_e, on) => { if (mainWindow) mainWindow.setAlwaysOnTop(!!on); });
 ipcMain.handle('tray:update', (_e, summaries) => updateTray(summaries));
 ipcMain.handle('tmdb:search', (_e, query) => tmdbSearch(query));
+ipcMain.handle('tmdb:detail', (_e, payload) => tmdbDetail(payload && payload.type, payload && payload.id));
+ipcMain.handle('tvmaze:search', (_e, query) => tvmazeSearch(query));
+ipcMain.handle('tvmaze:next', (_e, id) => tvmazeNext(id));
 ipcMain.handle('notify', (_e, payload) => {
   const { title, body } = payload || {};
   if (Notification.isSupported()) new Notification({ title, body, silent: false }).show();

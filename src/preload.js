@@ -15,8 +15,11 @@ contextBridge.exposeInMainWorld('api', {
   updateTray: (summaries) => ipcRenderer.invoke('tray:update', summaries),
   notify: (title, body) => ipcRenderer.invoke('notify', { title, body }),
 
-  // tmdb
+  // tmdb (movies) + tvmaze (tv, exact air times)
   tmdbSearch: (query) => ipcRenderer.invoke('tmdb:search', query),
+  tmdbDetail: (type, id) => ipcRenderer.invoke('tmdb:detail', { type, id }),
+  tvmazeSearch: (query) => ipcRenderer.invoke('tvmaze:search', query),
+  tvmazeNext: (id) => ipcRenderer.invoke('tvmaze:next', id),
 
   // updates
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),

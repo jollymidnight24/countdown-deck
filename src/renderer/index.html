@@ -54,12 +54,13 @@
       <h2 id="modalTitle">Add countdown</h2>
 
       <div class="tmdb-box">
-        <label class="inline-label">Look up a movie/TV release (optional)</label>
+        <label class="inline-label">Auto-find the date — search a movie or TV show (optional)</label>
         <div class="tmdb-row">
           <input id="tmdbQuery" type="text" placeholder="e.g. House of the Dragon" />
           <button type="button" id="tmdbSearchBtn" class="btn ghost">Search</button>
         </div>
         <div id="tmdbResults" class="tmdb-results"></div>
+        <p class="hint">TV shows use TVmaze for the next episode's <em>exact air time</em> (no key needed). Movies use TMDB release dates (requires a key in Settings; time is approximate).</p>
       </div>
 
       <form id="countdownForm">
@@ -110,6 +111,22 @@
         <span>Keep window always on top</span>
         <input id="alwaysOnTopInput" type="checkbox" />
       </label>
+
+      <label>Menu-bar / tray shows
+        <select id="trayModeInput">
+          <option value="soonest">Soonest countdown</option>
+          <option value="specific">A specific countdown</option>
+          <option value="cycle">Cycle through all</option>
+        </select>
+      </label>
+      <label id="trayPickWrap" class="hidden">Which countdown
+        <select id="trayIdInput"></select>
+      </label>
+      <label id="trayCycleWrap" class="hidden">Cycle every (seconds)
+        <input id="trayCycleInput" type="number" min="2" max="120" value="6" />
+      </label>
+
+      <hr />
       <label>TMDB API key (for movie/TV lookups)
         <input id="tmdbKeyInput" type="text" placeholder="Paste your free TMDB v3 API key" />
       </label>

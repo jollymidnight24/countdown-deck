@@ -4,7 +4,8 @@
 // State
 // ===========================================================================
 let countdowns = [];   // see normalize() for shape
-let settings = { theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '' };
+let settings = { theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '', trayMode: 'soonest', trayId: '', trayCycleSecs: 6 };
+let lastTraySig = '';
 let editingId = null;
 let dragId = null;
 let tickHandle = null;
@@ -42,6 +43,9 @@ const categoryList = $('categoryList');
 const settingsModal = $('settingsModal');
 const alwaysOnTopInput = $('alwaysOnTopInput');
 const tmdbKeyInput = $('tmdbKeyInput');
+const trayModeInput = $('trayModeInput');
+const trayIdInput = $('trayIdInput');
+const trayCycleInput = $('trayCycleInput');
 
 // ===========================================================================
 // Helpers
@@ -243,24 +247,45 @@ function tick() {
   }
 
   if (changed) persist();
-
-  // Tray / menu-bar summary (throttled) ---------------------------------
-  if (tickCount % 5 === 0) updateTray(now);
+  updateTray(now);
   tickCount++;
 }
 
-function updateTray(now) {
-  const summaries = countdowns
+// Active (still-counting-down) entries, soonest first.
+function trayEntries(now) {
+  return countdowns
     .filter((c) => c.mode === 'down')
-    .map((c) => ({ c, ms: effectiveTargetMs(c, now) - now }))
+    .map((c) => ({ id: c.id, title: c.title, ms: effectiveTargetMs(c, now) - now }))
     .filter((x) => x.ms > 0)
     .sort((a, b) => a.ms - b.ms)
-    .slice(0, 6)
-    .map(({ c, ms }) => {
-      const u = unitsFromMs(ms);
-      return `${c.title}: ${u.d}d ${pad(u.h)}h ${pad(u.m)}m`;
+    .map((x) => {
+      const u = unitsFromMs(x.ms);
+      return { id: x.id, label: `${x.title}: ${u.d}d ${pad(u.h)}h ${pad(u.m)}m` };
     });
-  window.api.updateTray(summaries);
+}
+
+function updateTray(now) {
+  const entries = trayEntries(now);
+  const items = entries.slice(0, 8).map((e) => e.label);
+
+  let title = '';
+  if (entries.length) {
+    if (settings.trayMode === 'specific') {
+      const e = entries.find((x) => x.id === settings.trayId);
+      title = (e || entries[0]).label;          // fall back if the chosen one elapsed
+    } else if (settings.trayMode === 'cycle') {
+      const secs = Math.min(120, Math.max(2, Number(settings.trayCycleSecs) || 6));
+      const idx = Math.floor(now / (secs * 1000)) % entries.length;
+      title = entries[idx].label;
+    } else {
+      title = entries[0].label;                 // soonest
+    }
+  }
+
+  const sig = title + '|' + items.join('§');
+  if (sig === lastTraySig) return;              // avoid redundant IPC every second
+  lastTraySig = sig;
+  window.api.updateTray({ title, items });
 }
 
 function refreshCategoryControls() {
@@ -380,9 +405,25 @@ function applyTheme() {
   $('themeBtn').innerHTML = settings.theme === 'dark' ? '&#9788;' : '&#9790;'; // sun / moon
 }
 
+function syncTrayWraps() {
+  $('trayPickWrap').classList.toggle('hidden', trayModeInput.value !== 'specific');
+  $('trayCycleWrap').classList.toggle('hidden', trayModeInput.value !== 'cycle');
+}
+
 function openSettings() {
   alwaysOnTopInput.checked = !!settings.alwaysOnTop;
   tmdbKeyInput.value = settings.tmdbApiKey || '';
+
+  // Populate the "specific countdown" picker from current down-mode countdowns.
+  const opts = countdowns.filter((c) => c.mode === 'down');
+  trayIdInput.innerHTML = opts.length
+    ? opts.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join('')
+    : '<option value="">(no countdowns yet)</option>';
+  trayModeInput.value = settings.trayMode || 'soonest';
+  if (settings.trayId) trayIdInput.value = settings.trayId;
+  trayCycleInput.value = settings.trayCycleSecs || 6;
+  syncTrayWraps();
+
   settingsModal.classList.remove('hidden');
 }
 function closeSettings() { settingsModal.classList.add('hidden'); }
@@ -390,8 +431,13 @@ function closeSettings() { settingsModal.classList.add('hidden'); }
 function saveSettings() {
   settings.alwaysOnTop = alwaysOnTopInput.checked;
   settings.tmdbApiKey = tmdbKeyInput.value.trim();
+  settings.trayMode = trayModeInput.value;
+  settings.trayId = trayIdInput.value || '';
+  settings.trayCycleSecs = Math.min(120, Math.max(2, Number(trayCycleInput.value) || 6));
   persistSettings();
   window.api.setAlwaysOnTop(settings.alwaysOnTop);
+  lastTraySig = '';            // force the menu-bar title to refresh now
+  updateTray(Date.now());
   closeSettings();
 }
 
@@ -424,34 +470,85 @@ function importCountdowns(file) {
 }
 
 // ===========================================================================
-// TMDB lookup
+// Auto-find lookup: TVmaze for TV (exact air times), TMDB for movies
 // ===========================================================================
-async function runTmdbSearch() {
+async function runLookup() {
   const q = $('tmdbQuery').value.trim();
   const box = $('tmdbResults');
   if (!q) return;
   box.innerHTML = '<div class="tmdb-empty">Searching…</div>';
-  const res = await window.api.tmdbSearch(q);
-  if (res.error === 'no-key') {
-    box.innerHTML = '<div class="tmdb-empty">No TMDB API key set. Add one in Settings (⚙) to enable lookups.</div>';
+
+  const [tv, movies] = await Promise.all([
+    window.api.tvmazeSearch(q),
+    settings.tmdbApiKey ? window.api.tmdbSearch(q) : Promise.resolve({ results: [] })
+  ]);
+
+  const items = [];
+  if (tv && tv.results) {
+    for (const s of tv.results.slice(0, 10)) {
+      const since = s.premiered ? ' · since ' + s.premiered.slice(0, 4) : '';
+      items.push({ source: 'tvmaze', id: s.id, title: s.name, sub: `TV · ${s.network || s.status || 'show'}${since}` });
+    }
+  }
+  if (movies && movies.results) {
+    for (const m of movies.results.filter((r) => r.type === 'movie').slice(0, 8)) {
+      items.push({ source: 'tmdb', id: m.id, title: m.title, date: m.date, sub: `Movie${m.date ? ' · ' + m.date : ''}` });
+    }
+  }
+
+  if (!items.length) {
+    box.innerHTML = (tv && tv.error)
+      ? `<div class="tmdb-empty">Lookup failed (${tv.error}).</div>`
+      : '<div class="tmdb-empty">No matches found.</div>';
     return;
   }
-  if (res.error) { box.innerHTML = `<div class="tmdb-empty">Lookup failed (${res.error}).</div>`; return; }
-  const results = (res.results || []).filter((r) => r.date);
-  if (!results.length) { box.innerHTML = '<div class="tmdb-empty">No dated results found.</div>'; return; }
+
   box.innerHTML = '';
-  for (const r of results.slice(0, 12)) {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'tmdb-item';
-    item.innerHTML = `<div>${escapeHtml(r.title)} <span class="t-date">(${r.type === 'tv' ? 'TV' : 'Movie'} · ${r.date})</span></div>`;
-    item.addEventListener('click', () => {
-      titleInput.value = r.title;
-      dateInput.value = `${r.date}T00:00`;
-      box.innerHTML = '';
-    });
-    box.appendChild(item);
+  for (const it of items) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'tmdb-item';
+    el.innerHTML = `<div>${escapeHtml(it.title)} <span class="t-date">(${escapeHtml(it.sub)})</span></div>`;
+    el.addEventListener('click', () => selectResult(it, box));
+    box.appendChild(el);
   }
+}
+
+// On selection, fetch the precise date: TVmaze next-episode airstamp (exact
+// time + timezone) for TV, or TMDB release date for movies.
+async function selectResult(it, box) {
+  box.innerHTML = '<div class="tmdb-empty">Finding the exact date…</div>';
+  let title = it.title;
+  let localValue = '';
+  let note = '';
+
+  if (it.source === 'tvmaze') {
+    const r = await window.api.tvmazeNext(it.id);
+    if (r && r.error) {
+      note = `Lookup failed (${r.error}).`;
+    } else if (r && r.airstamp) {
+      title = `${it.title} — S${r.season}E${r.episode}`;
+      localValue = toLocalInputValue(r.airstamp);   // airstamp carries the timezone
+      note = `Exact air time set from TVmaze${r.epName ? ` · “${r.epName}”` : ''}, shown in your local time.`;
+    } else {
+      note = 'No upcoming episode is scheduled on TVmaze yet — set the date manually.';
+    }
+  } else {
+    const det = await window.api.tmdbDetail('movie', it.id);
+    const dateStr = (det && !det.error && det.date) ? det.date : it.date;
+    title = (det && det.name) ? det.name : it.title;
+    if (dateStr) {
+      localValue = `${dateStr}T20:00`;   // movies have no set time; sensible default
+      note = 'Release date from TMDB — movies have no set time, so adjust if needed.';
+    } else {
+      note = 'No release date found for this movie.';
+    }
+  }
+
+  titleInput.value = title;
+  modeInput.value = 'down';
+  if (localValue) dateInput.value = localValue;
+  box.innerHTML = `<div class="tmdb-empty">Filled in “${escapeHtml(title)}”. ${escapeHtml(note)}</div>`;
 }
 
 // ===========================================================================
@@ -495,13 +592,14 @@ async function init() {
   // add/edit modal
   $('cancelBtn').addEventListener('click', closeModal);
   form.addEventListener('submit', saveFromForm);
-  $('tmdbSearchBtn').addEventListener('click', runTmdbSearch);
-  $('tmdbQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runTmdbSearch(); } });
+  $('tmdbSearchBtn').addEventListener('click', runLookup);
+  $('tmdbQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runLookup(); } });
 
   // settings modal
   $('settingsBtn').addEventListener('click', openSettings);
   $('settingsCloseBtn').addEventListener('click', closeSettings);
   $('settingsSaveBtn').addEventListener('click', saveSettings);
+  trayModeInput.addEventListener('change', syncTrayWraps);
   $('exportBtn').addEventListener('click', exportCountdowns);
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importCountdowns(e.target.files[0]); e.target.value = ''; });

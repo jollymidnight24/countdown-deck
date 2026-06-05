@@ -11,14 +11,21 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Pin** important countdowns to the top, **drag to reorder**, **search**, **sort** (soonest / name / manual), and **filter by category**.
 - **Desktop notifications** when a countdown reaches zero (and when a recurring one rolls over).
 - **Light / dark theme** toggle.
-- **Menu-bar / system-tray view** showing your next countdowns, plus an optional **always-on-top** window.
-- **Movie/TV release lookup** via TMDB — search a title and auto-fill its release date (needs a free TMDB API key, set in Settings).
+- **Menu-bar / system-tray view** with your choice of what to show: the **soonest** countdown, a **specific** one you pick, or **cycle** through them all at an interval you set. Plus an optional **always-on-top** window.
+- **Auto-find dates** — search a movie or TV show and the app fills in the real date automatically. **TV shows use [TVmaze](https://www.tvmaze.com/api)** (free, no key) to get the next episode's **exact air time including timezone** (e.g. a 9:00 PM ET premiere lands precisely). **Movies use TMDB** release dates (needs a free key). Manual entry always remains available.
 - **Import / export** your countdowns to a JSON file.
 - A custom app icon, and **full auto-update** via `electron-updater` against GitHub Releases, with an in-app badge and one-click "restart to update."
 
-### Setting the TMDB API key
+### Where the dates come from
 
-The movie/TV lookup uses [The Movie Database](https://www.themoviedb.org). It's free: create an account, go to **Settings → API**, request a **v3 API key**, then paste it into Countdown Deck's **Settings (⚙)**. The key is stored locally on your machine only. Note that TMDB returns known release / first-air dates; far-future seasons without an announced date won't have one yet.
+- **TV shows → [TVmaze](https://www.tvmaze.com/api).** Free and keyless. The app reads each episode's `airstamp` (a full ISO 8601 timestamp with timezone offset, e.g. `2026-06-21T21:00:00-04:00`) and sets your countdown to that exact instant, displayed in your local time. If a show has no upcoming episode dated yet, it tells you and you can set the date manually.
+- **Movies → TMDB** (needs the free API key below). TMDB stores a release *date* but not a time, so the app fills a default time you can adjust.
+
+### Setting the TMDB API key (movies only)
+
+The movie lookup uses [The Movie Database](https://www.themoviedb.org). It's free: create an account, go to **Settings → API**, request a **v3 API key**, then paste it into Countdown Deck's **Settings (⚙)**. The key is stored locally on your machine only.
+
+When you pick a search result, the app calls TMDB again to get the **real next date** — for a TV show that's its *next episode to air* (e.g. a Season 3 premiere, once announced), and for a movie it's the release date. Two honest limitations: (1) TMDB only stores the **date**, not the broadcast **time/zone**, so the app fills a default time you can adjust; and (2) episodes/seasons that haven't been dated by TMDB yet won't return a date until they're announced — in that case the app falls back to the latest known date and tells you.
 
 ### A note on closing vs. quitting
 
