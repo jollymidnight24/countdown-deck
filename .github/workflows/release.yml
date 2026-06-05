@@ -6,6 +6,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:   # lets you re-run a build manually from the Actions tab
 
 permissions:
   contents: write   # required so the GITHUB_TOKEN can create the Release
