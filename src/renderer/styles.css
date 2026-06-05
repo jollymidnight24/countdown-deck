@@ -44,8 +44,44 @@ html, body {
   height: 100%;
   background: var(--bg-grad);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--ui-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Dashboard background layer ----------------------------------------- */
+#bgLayer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+#bgLayer.has-media::after {
+  /* readability scrim over busy backgrounds */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+#bgLayer video, #bgLayer img.bg-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#bgCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+#bgLayer.anim-canvas #bgCanvas { display: block; }
+
+/* Animated CSS gradient backgrounds (shared by dashboard + cards) ----- */
+.animbg-aurora { background: linear-gradient(120deg, #0b2a2a, #123a5e, #2a6f6f, #1b3a6b, #0b2a2a); background-size: 300% 300%; animation: bgshift 18s ease infinite; }
+.animbg-ember  { background: linear-gradient(120deg, #2a0e2e, #6e2233, #b5462f, #6e2233, #2a0e2e); background-size: 300% 300%; animation: bgshift 16s ease infinite; }
+.animbg-ocean  { background: linear-gradient(120deg, #06122c, #0a3b6e, #1278aa, #0a3b6e, #06122c); background-size: 300% 300%; animation: bgshift 20s ease infinite; }
+.animbg-twilight { background: linear-gradient(120deg, #141a3a, #3a2a6e, #7a3a8a, #3a2a6e, #141a3a); background-size: 300% 300%; animation: bgshift 22s ease infinite; }
+@keyframes bgshift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@media (prefers-reduced-motion: reduce) {
+  .animbg-aurora, .animbg-ember, .animbg-ocean, .animbg-twilight { animation: none; }
 }
 
 /* Topbar -------------------------------------------------------------- */
@@ -142,12 +178,29 @@ main { padding: 12px 22px 28px; }
   position: absolute; inset: 0 0 auto 0; height: 4px;
   background: var(--card-accent, var(--accent));
 }
+/* Per-card backgrounds (image / animation / auto) */
+.card.has-bg { background-size: cover; background-position: center; }
+.card.has-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+  z-index: 0;
+}
+.card.has-bg::before { z-index: 2; }            /* keep accent bar above scrim */
+.card.has-bg > * { position: relative; z-index: 1; }
+.card .card-media {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; border-radius: inherit;
+}
+
 .card.dragging { opacity: 0.5; }
 .card.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .card.pinned { box-shadow: var(--shadow), 0 0 0 1px var(--card-accent, var(--accent)) inset; }
 
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-.card-title { font-size: 16px; font-weight: 650; line-height: 1.3; word-break: break-word; display: flex; align-items: center; gap: 6px; }
+.card { --card-scale: 1; }
+.card-title { font-size: calc(16px * var(--card-scale)); font-weight: 650; line-height: 1.3; word-break: break-word; display: flex; align-items: center; gap: 6px; }
 .pin-dot { font-size: 12px; }
 .card-meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .tag {
@@ -162,7 +215,7 @@ main { padding: 12px 22px 28px; }
 
 .timer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
 .unit { background: var(--field); border-radius: 10px; padding: 10px 4px; }
-.unit .num { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.unit .num { font-size: calc(30px * var(--card-scale)); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .unit .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-top: 4px; }
 
 .card.done .timer { opacity: 0.55; }
@@ -224,5 +277,13 @@ hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 .tmdb-item:hover { border-color: var(--accent); }
 .tmdb-item .t-date { color: var(--muted); font-size: 12px; }
 .tmdb-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+
+/* Appearance fieldset + settings headings */
+.appearance { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 2px; margin: 4px 0 14px; }
+.appearance legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
+.settings-h { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 16px 0 8px; }
+.modal select { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 14px; }
+.modal input[type="number"] { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 14px; }
+.modal input[type="file"] { width: 100%; margin-top: 6px; font-size: 12px; color: var(--muted); }
 
 .hidden { display: none !important; }

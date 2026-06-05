@@ -4,7 +4,12 @@
 // State
 // ===========================================================================
 let countdowns = [];   // see normalize() for shape
-let settings = { theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '', trayMode: 'soonest', trayId: '', trayCycleSecs: 6 };
+let settings = {
+  theme: 'dark', sort: 'manual', alwaysOnTop: false, tmdbApiKey: '',
+  trayMode: 'soonest', trayId: '', trayCycleSecs: 6,
+  dateFormat: 'system', clock: 'auto', timeZone: '',
+  uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula'
+};
 let lastTraySig = '';
 let editingId = null;
 let dragId = null;
@@ -16,6 +21,94 @@ const PRESETS = [
   { title: 'Black Friday 2026', target: '2026-11-27T00:00', color: '#5b8cff', category: 'Shopping' },
   { title: 'Summer Solstice 2026', target: '2026-06-21T00:00', color: '#ffb05b', category: 'Seasons' }
 ];
+
+// ---------------------------------------------------------------------------
+// Appearance catalogs
+// ---------------------------------------------------------------------------
+const FONTS = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  rounded: 'ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  mono: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+  condensed: '"Avenir Next Condensed", "Arial Narrow", system-ui, sans-serif'
+};
+const FONT_LABELS = { system: 'System sans', rounded: 'Rounded', serif: 'Serif', mono: 'Monospace', condensed: 'Condensed' };
+
+const PRESET_BGS = [
+  { id: 'aurora', name: 'Aurora' }, { id: 'nebula', name: 'Nebula' }, { id: 'sunset', name: 'Sunset' },
+  { id: 'ocean', name: 'Ocean' }, { id: 'mesh', name: 'Mesh' }, { id: 'cyber', name: 'Cyber grid' }
+];
+const ANIM_BGS = [
+  { id: 'aurora', name: 'Aurora (animated)' }, { id: 'ocean', name: 'Ocean (animated)' },
+  { id: 'ember', name: 'Ember (animated)' }, { id: 'twilight', name: 'Twilight (animated)' }
+];
+const CANVAS_BGS = [{ id: 'stars', name: 'Starfield (animated)' }, { id: 'particles', name: 'Particles (animated)' }];
+
+// ---------------------------------------------------------------------------
+// Trading sessions: exchanges, holidays, and next-occurrence math
+// ---------------------------------------------------------------------------
+const US_HOLIDAYS = new Set([
+  '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
+  '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31', '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24'
+]);
+
+const SESSION_LABEL = { pre: 'Pre-market open', open: 'Market open', close: 'Market close', post: 'Post-market close' };
+
+const EXCHANGES = [
+  { id: 'nyse', name: 'NYSE (New York)', tz: 'America/New_York', holidays: 'us', sessions: { pre: '04:00', open: '09:30', close: '16:00', post: '20:00' } },
+  { id: 'nasdaq', name: 'Nasdaq (New York)', tz: 'America/New_York', holidays: 'us', sessions: { pre: '04:00', open: '09:30', close: '16:00', post: '20:00' } },
+  { id: 'tsx', name: 'TSX (Toronto)', tz: 'America/Toronto', holidays: null, sessions: { open: '09:30', close: '16:00' } },
+  { id: 'lse', name: 'LSE (London)', tz: 'Europe/London', holidays: null, sessions: { open: '08:00', close: '16:30' } },
+  { id: 'xetra', name: 'XETRA (Frankfurt)', tz: 'Europe/Berlin', holidays: null, sessions: { open: '09:00', close: '17:30' } },
+  { id: 'euronext', name: 'Euronext (Paris)', tz: 'Europe/Paris', holidays: null, sessions: { open: '09:00', close: '17:30' } },
+  { id: 'tse', name: 'TSE (Tokyo)', tz: 'Asia/Tokyo', holidays: null, sessions: { open: '09:00', close: '15:00' } },
+  { id: 'hkex', name: 'HKEX (Hong Kong)', tz: 'Asia/Hong_Kong', holidays: null, sessions: { open: '09:30', close: '16:00' } },
+  { id: 'sse', name: 'SSE (Shanghai)', tz: 'Asia/Shanghai', holidays: null, sessions: { open: '09:30', close: '15:00' } },
+  { id: 'nse', name: 'NSE (India)', tz: 'Asia/Kolkata', holidays: null, sessions: { open: '09:15', close: '15:30' } },
+  { id: 'asx', name: 'ASX (Sydney)', tz: 'Australia/Sydney', holidays: null, sessions: { open: '10:00', close: '16:00' } }
+];
+const exchangeById = (id) => EXCHANGES.find((e) => e.id === id);
+
+function getZoned(date, tz) {
+  const dtf = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const p = {};
+  for (const part of dtf.formatToParts(date)) p[part.type] = part.value;
+  let h = +p.hour; if (h === 24) h = 0;
+  return { y: +p.year, mo: +p.month, d: +p.day, h, mi: +p.minute, s: +p.second };
+}
+function tzOffsetMs(date, tz) {
+  const z = getZoned(date, tz);
+  return Date.UTC(z.y, z.mo - 1, z.d, z.h, z.mi, z.s) - date.getTime();
+}
+function wallToUtc(y, mo, d, h, mi, tz) {
+  let guess = Date.UTC(y, mo - 1, d, h, mi);
+  for (let i = 0; i < 2; i++) guess = Date.UTC(y, mo - 1, d, h, mi) - tzOffsetMs(new Date(guess), tz);
+  return guess;
+}
+function ymdKey(y, mo, d) { return `${y}-${pad(mo)}-${pad(d)}`; }
+function isTradingDay(y, mo, d, ex) {
+  const dow = new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
+  if (dow === 0 || dow === 6) return false;
+  if (ex.holidays === 'us' && US_HOLIDAYS.has(ymdKey(y, mo, d))) return false;
+  return true;
+}
+function nextSessionMs(ex, sessionKey, fromMs) {
+  const hhmm = ex && ex.sessions[sessionKey];
+  if (!hhmm) return NaN;
+  const [sh, sm] = hhmm.split(':').map(Number);
+  const z = getZoned(new Date(fromMs), ex.tz);
+  let y = z.y, mo = z.mo, d = z.d;
+  for (let i = 0; i < 400; i++) {
+    if (isTradingDay(y, mo, d, ex)) {
+      const inst = wallToUtc(y, mo, d, sh, sm, ex.tz);
+      if (inst > fromMs) return inst;
+    }
+    const nx = new Date(Date.UTC(y, mo - 1, d));
+    nx.setUTCDate(nx.getUTCDate() + 1);
+    y = nx.getUTCFullYear(); mo = nx.getUTCMonth() + 1; d = nx.getUTCDate();
+  }
+  return NaN;
+}
 
 // ===========================================================================
 // DOM refs
@@ -38,6 +131,13 @@ const recurrenceInput = $('recurrenceInput');
 const categoryInput = $('categoryInput');
 const colorInput = $('colorInput');
 const categoryList = $('categoryList');
+const kindInput = $('kindInput');
+const exchangeInput = $('exchangeInput');
+const sessionInput = $('sessionInput');
+const bgInput = $('bgInput');
+const fontInput = $('fontInput');
+const fontScaleInput = $('fontScaleInput');
+const bgFile = $('bgFile');
 
 // settings modal
 const settingsModal = $('settingsModal');
@@ -46,6 +146,13 @@ const tmdbKeyInput = $('tmdbKeyInput');
 const trayModeInput = $('trayModeInput');
 const trayIdInput = $('trayIdInput');
 const trayCycleInput = $('trayCycleInput');
+const uiFontInput = $('uiFontInput');
+const uiScaleInput = $('uiScaleInput');
+const dashboardBgInput = $('dashboardBgInput');
+const dashboardBgFile = $('dashboardBgFile');
+const dateFormatInput = $('dateFormatInput');
+const clockInput = $('clockInput');
+const timeZoneInput = $('timeZoneInput');
 
 // ===========================================================================
 // Helpers
@@ -56,6 +163,9 @@ const pad = (n) => String(n).padStart(2, '0');
 function normalize(c) {
   return {
     id: c.id || uid(),
+    kind: c.kind === 'trading' ? 'trading' : 'date',
+    exchange: c.exchange || '',
+    session: c.session || 'open',
     title: String(c.title || 'Untitled'),
     target: c.target,
     color: c.color || '#5b8cff',
@@ -64,7 +174,10 @@ function normalize(c) {
     recurrence: ['weekly', 'monthly', 'yearly'].includes(c.recurrence) ? c.recurrence : 'none',
     mode: c.mode === 'up' ? 'up' : 'down',
     notified: !!c.notified,
-    lastOcc: c.lastOcc || null
+    lastOcc: c.lastOcc || null,
+    bg: c.bg || 'auto',
+    fontFamily: c.fontFamily || '',
+    fontScale: Number(c.fontScale) || 1
   };
 }
 
@@ -85,6 +198,7 @@ function nextOccurrence(baseISO, rec, fromMs) {
 }
 
 function effectiveTargetMs(c, nowMs) {
+  if (c.kind === 'trading') return nextSessionMs(exchangeById(c.exchange), c.session, nowMs);
   if (c.recurrence !== 'none') return nextOccurrence(c.target, c.recurrence, nowMs);
   return targetMs(c.target);
 }
@@ -100,19 +214,45 @@ function breakdown(c, nowMs) {
     return Object.assign({ done: false, mode: 'up' }, unitsFromMs(diff));
   }
   const diff = effectiveTargetMs(c, nowMs) - nowMs;
+  if (!isFinite(diff)) return { done: false, mode: 'down', d: 0, h: 0, m: 0, s: 0 };
   if (diff <= 0) return { done: true, mode: 'down', d: 0, h: 0, m: 0, s: 0 };
   return Object.assign({ done: false, mode: 'down' }, unitsFromMs(diff));
 }
 
+function fmtOptions() {
+  const clock = settings.clock;
+  const h12 = clock === '12' ? true : clock === '24' ? false : undefined;
+  let o;
+  switch (settings.dateFormat) {
+    case 'us': o = { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: h12 === undefined ? true : h12 }; break;
+    case 'eu': o = { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: h12 === undefined ? false : h12 }; break;
+    case 'long': o = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: h12 }; break;
+    default: o = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: h12 };
+  }
+  if (settings.timeZone) { o.timeZone = settings.timeZone; o.timeZoneName = 'short'; }
+  return o;
+}
+
+function formatInstant(ms) {
+  if (!isFinite(ms)) return '—';
+  const d = new Date(ms);
+  if (settings.dateFormat === 'iso') {
+    const tz = settings.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const z = getZoned(d, tz);
+    return `${z.y}-${pad(z.mo)}-${pad(z.d)} ${pad(z.h)}:${pad(z.mi)}`;
+  }
+  return new Intl.DateTimeFormat(undefined, fmtOptions()).format(d);
+}
+
 function formatTarget(c) {
   const ms = effectiveTargetMs(c, Date.now());
-  const d = new Date(ms);
-  const base = d.toLocaleString(undefined, {
-    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  });
+  if (c.kind === 'trading') {
+    const sess = SESSION_LABEL[c.session] || c.session;
+    return `${sess} · ${formatInstant(ms)} · each trading day`;
+  }
   const verb = c.mode === 'up' ? 'Since' : 'Target';
   const rep = c.recurrence !== 'none' ? ` · repeats ${c.recurrence}` : '';
-  return `${verb}: ${base}${rep}`;
+  return `${verb}: ${formatInstant(ms)}${rep}`;
 }
 
 function toLocalInputValue(iso) {
@@ -200,9 +340,49 @@ function render() {
 
     card.querySelector('.t-text').textContent = c.title;
     card.querySelector('.t-target').textContent = formatTarget(c);
+    applyCardAppearance(card, c);
     grid.appendChild(card);
   }
   tick();
+}
+
+// Apply a countdown's background + font choices to its card element.
+function applyCardAppearance(card, c) {
+  card.style.setProperty('--card-scale', c.fontScale || 1);
+  card.style.fontFamily = c.fontFamily && FONTS[c.fontFamily] ? FONTS[c.fontFamily] : '';
+
+  // reset
+  card.classList.remove('has-bg', 'animbg-aurora', 'animbg-ocean', 'animbg-ember', 'animbg-twilight');
+  card.style.backgroundImage = '';
+  const old = card.querySelector('.card-media');
+  if (old) old.remove();
+
+  const spec = c.bg || 'auto';
+  if (spec === 'none') return;
+
+  if (spec === 'auto') {
+    card.classList.add('has-bg');
+    card.style.backgroundImage = `radial-gradient(120% 120% at 80% 0%, ${c.color}55 0%, transparent 60%)`;
+    return;
+  }
+  const [type, val] = spec.split(':');
+  if (type === 'preset') {
+    card.classList.add('has-bg');
+    card.style.backgroundImage = `url("assets/backgrounds/${val}.jpg")`;
+  } else if (type === 'anim') {
+    card.classList.add('has-bg', 'animbg-' + val);
+  } else if (type === 'media') {
+    const url = mediaUrl(val);
+    if (url) {
+      card.classList.add('has-bg');
+      const isVid = /\.(mp4|webm)$/i.test(url);
+      const el = document.createElement(isVid ? 'video' : 'img');
+      el.className = 'card-media';
+      el.src = url;
+      if (isVid) { el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true; }
+      card.insertBefore(el, card.firstChild);
+    }
+  }
 }
 
 function escapeHtml(s) {
@@ -216,21 +396,24 @@ function tick() {
   for (const c of countdowns) {
     const b = breakdown(c, now);
 
-    // Notifications + recurrence roll-over -------------------------------
-    if (c.mode === 'down' && c.recurrence === 'none') {
+    // Notifications + roll-over (recurring and trading re-arm automatically)
+    const isRolling = c.recurrence !== 'none' || c.kind === 'trading';
+    if (c.mode === 'down' && !isRolling) {
       if (b.done && !c.notified) {
         c.notified = true; changed = true;
         window.api.notify('Countdown reached!', `${c.title} is here.`);
       } else if (!b.done && c.notified) {
         c.notified = false; changed = true; // target moved into the future via edit
       }
-    } else if (c.recurrence !== 'none') {
+    } else if (isRolling) {
       const occ = effectiveTargetMs(c, now);
       if (c.lastOcc == null) {
         c.lastOcc = occ; changed = true;
       } else if (occ !== c.lastOcc) {
         c.lastOcc = occ; changed = true;
-        window.api.notify('Recurring countdown', `${c.title} just occurred. Next one is counting down.`);
+        const msg = c.kind === 'trading' ? `${c.title} just happened. Counting down to the next session.`
+          : `${c.title} just occurred. Next one is counting down.`;
+        window.api.notify(c.kind === 'trading' ? 'Trading session' : 'Recurring countdown', msg);
       }
     }
 
@@ -298,46 +481,249 @@ function refreshCategoryControls() {
 }
 
 // ===========================================================================
+// Media + appearance helpers
+// ===========================================================================
+const mediaUrl = (file) => (file ? `cdmedia://media/${file}` : '');
+
+function applyUiFont() { document.body.style.setProperty('--ui-font', FONTS[settings.uiFont] || FONTS.system); }
+function applyUiScale() { window.api.setZoom(Number(settings.uiScale) || 1); }
+
+let canvasRAF = null;
+function stopCanvas() { if (canvasRAF) cancelAnimationFrame(canvasRAF); canvasRAF = null; }
+
+function startCanvas(kind) {
+  const canvas = $('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.onresize = resize;
+  const n = kind === 'particles' ? 70 : 220;
+  const pts = Array.from({ length: n }, () => ({
+    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+    r: kind === 'particles' ? 1 + Math.random() * 3 : Math.random() * 1.6 + 0.3,
+    vx: (Math.random() - 0.5) * (kind === 'particles' ? 0.3 : 0.08),
+    vy: (Math.random() - 0.5) * (kind === 'particles' ? 0.3 : 0.08) + (kind === 'stars' ? 0.05 : 0),
+    a: 0.3 + Math.random() * 0.7
+  }));
+  function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of pts) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x += canvas.width; if (p.x > canvas.width) p.x -= canvas.width;
+      if (p.y < 0) p.y += canvas.height; if (p.y > canvas.height) p.y -= canvas.height;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = kind === 'particles' ? `rgba(120,160,255,${p.a * 0.6})` : `rgba(255,255,255,${p.a})`;
+      ctx.fill();
+    }
+    canvasRAF = requestAnimationFrame(frame);
+  }
+  frame();
+}
+
+const ANIM_CLASSES = ['animbg-aurora', 'animbg-ocean', 'animbg-ember', 'animbg-twilight'];
+
+function applyDashboardBg() {
+  const layer = $('bgLayer');
+  const spec = settings.dashboardBg || '';
+  stopCanvas();
+  layer.className = '';
+  layer.style.backgroundImage = '';
+  const oldMedia = layer.querySelector('.bg-media');
+  if (oldMedia) oldMedia.remove();
+  if (!spec || spec === 'none') return;
+
+  const [type, val] = spec.split(':');
+  if (type === 'preset') {
+    layer.classList.add('has-media');
+    layer.style.backgroundImage = `url("assets/backgrounds/${val}.jpg")`;
+  } else if (type === 'anim') {
+    layer.classList.add('has-media', 'animbg-' + val);
+  } else if (type === 'canvas') {
+    layer.classList.add('has-media', 'anim-canvas');
+    startCanvas(val);
+  } else if (type === 'media') {
+    const url = mediaUrl(val);
+    if (url) {
+      layer.classList.add('has-media');
+      const isVid = /\.(mp4|webm)$/i.test(url);
+      const el = document.createElement(isVid ? 'video' : 'img');
+      el.className = 'bg-media';
+      el.src = url;
+      if (isVid) { el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true; }
+      layer.insertBefore(el, layer.firstChild);
+    }
+  }
+}
+
+// Build a background <select> with grouped options.
+function buildBgSelect(sel, { includeAuto }) {
+  const groups = [];
+  const basic = [];
+  if (includeAuto) basic.push(['auto', 'Auto (from accent color)']);
+  basic.push(['none', 'None']);
+  groups.push(['Basic', basic]);
+  groups.push(['Generated images', PRESET_BGS.map((b) => ['preset:' + b.id, b.name])]);
+  groups.push(['Animated gradients', ANIM_BGS.map((b) => ['anim:' + b.id, b.name])]);
+  groups.push(['Animated canvas', CANVAS_BGS.map((b) => ['canvas:' + b.id, b.name])]);
+  groups.push(['Custom', [['upload', 'Upload image / GIF / video…']]]);
+  sel.innerHTML = groups.map(([label, opts]) =>
+    `<optgroup label="${label}">` + opts.map(([v, t]) => `<option value="${v}">${escapeHtml(t)}</option>`).join('') + '</optgroup>'
+  ).join('');
+}
+
+function buildFontSelect(sel, includeInherit) {
+  const opts = (includeInherit ? [['', 'Match UI font']] : []).concat(Object.keys(FONTS).map((k) => [k, FONT_LABELS[k]]));
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${escapeHtml(t)}</option>`).join('');
+}
+
+function buildTimeZoneSelect(sel) {
+  const zones = ['', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Kolkata', 'Asia/Hong_Kong', 'Asia/Shanghai', 'Asia/Tokyo', 'Australia/Sydney', 'UTC'];
+  sel.innerHTML = zones.map((z) => `<option value="${z}">${z ? z.replace('_', ' ') : 'Local (this computer)'}</option>`).join('');
+}
+
+function buildExchangeSelect() {
+  exchangeInput.innerHTML = EXCHANGES.map((e) => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+}
+function buildSessionSelect(exId) {
+  const ex = exchangeById(exId) || EXCHANGES[0];
+  sessionInput.innerHTML = Object.keys(ex.sessions).map((k) => `<option value="${k}">${SESSION_LABEL[k]}</option>`).join('');
+}
+
+// When an upload option is chosen, import the file and swap in a concrete value.
+async function handleMediaPick(fileInput, sel, wrap) {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const res = await window.api.saveMedia(reader.result, ext);
+    if (res && res.url && res.file) {
+      const opt = document.createElement('option');
+      opt.value = 'media:' + res.file;
+      opt.textContent = 'Uploaded: ' + file.name.slice(0, 28);
+      sel.appendChild(opt);
+      sel.value = opt.value;
+      if (wrap) wrap.classList.add('hidden');
+    } else {
+      alert('Could not import that file.');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ===========================================================================
 // Add / edit
 // ===========================================================================
+function syncKindFields() {
+  const trading = kindInput.value === 'trading';
+  $('tradingFields').classList.toggle('hidden', !trading);
+  $('dateFields').classList.toggle('hidden', trading);
+  $('tmdbBox').classList.toggle('hidden', trading);
+}
+
+let lastSuggestedTitle = '';
+// Auto-fill a sensible title for trading countdowns without clobbering a custom one.
+function suggestTradingTitle(force) {
+  if (kindInput.value !== 'trading') return;
+  const ex = exchangeById(exchangeInput.value) || EXCHANGES[0];
+  const suggestion = `${ex.name.replace(/\s*\(.*\)$/, '')} · ${SESSION_LABEL[sessionInput.value] || ''}`.trim();
+  if (force || !titleInput.value.trim() || titleInput.value === lastSuggestedTitle) {
+    titleInput.value = suggestion;
+    lastSuggestedTitle = suggestion;
+  }
+}
+
 function openModal(editId = null) {
   editingId = editId;
   $('tmdbResults').innerHTML = '';
   $('tmdbQuery').value = '';
+  buildBgSelect(bgInput, { includeAuto: true });
+  buildFontSelect(fontInput, true);
+  buildExchangeSelect();
+  $('bgUploadWrap').classList.add('hidden');
+
   if (editId) {
     const c = countdowns.find((x) => x.id === editId);
     modalTitle.textContent = 'Edit countdown';
+    kindInput.value = c.kind;
     titleInput.value = c.title;
-    dateInput.value = toLocalInputValue(c.target);
+    dateInput.value = c.target ? toLocalInputValue(c.target) : '';
     modeInput.value = c.mode;
     recurrenceInput.value = c.recurrence;
     categoryInput.value = c.category;
     colorInput.value = c.color;
+    buildSessionSelect(c.exchange || EXCHANGES[0].id);
+    if (c.exchange) exchangeInput.value = c.exchange;
+    sessionInput.value = c.session;
+    // appearance (add a concrete option if it's an uploaded media spec)
+    if (c.bg && c.bg.startsWith('media:')) {
+      const opt = document.createElement('option');
+      opt.value = c.bg; opt.textContent = 'Current uploaded media';
+      bgInput.appendChild(opt);
+    }
+    bgInput.value = c.bg || 'auto';
+    fontInput.value = c.fontFamily || '';
+    fontScaleInput.value = String(c.fontScale || 1);
   } else {
     modalTitle.textContent = 'Add countdown';
     form.reset();
+    kindInput.value = 'date';
     colorInput.value = '#5b8cff';
     modeInput.value = 'down';
     recurrenceInput.value = 'none';
     dateInput.value = toLocalInputValue(new Date(Date.now() + 7 * 86400000).toISOString());
+    buildSessionSelect(EXCHANGES[0].id);
+    bgInput.value = 'auto';
+    fontInput.value = '';
+    fontScaleInput.value = '1';
   }
+  syncKindFields();
   modal.classList.remove('hidden');
   titleInput.focus();
 }
 
 function closeModal() { modal.classList.add('hidden'); editingId = null; }
 
+function bgValueOrDefault(v) { return v === 'upload' ? 'auto' : v; }
+
 function saveFromForm(evt) {
   evt.preventDefault();
-  if (!titleInput.value.trim() || !dateInput.value) return;
-  const data = {
-    title: titleInput.value.trim(),
-    target: new Date(dateInput.value).toISOString(),
-    mode: modeInput.value,
-    recurrence: recurrenceInput.value,
-    category: categoryInput.value.trim(),
-    color: colorInput.value
+  const trading = kindInput.value === 'trading';
+  if (!titleInput.value.trim()) return;
+  if (!trading && !dateInput.value) return;
+
+  const appearance = {
+    bg: bgValueOrDefault(bgInput.value),
+    fontFamily: fontInput.value,
+    fontScale: Number(fontScaleInput.value) || 1
   };
+
+  let data;
+  if (trading) {
+    data = Object.assign({
+      kind: 'trading',
+      exchange: exchangeInput.value,
+      session: sessionInput.value,
+      title: titleInput.value.trim(),
+      target: '',
+      mode: 'down',
+      recurrence: 'none',
+      category: categoryInput.value.trim() || 'Markets',
+      color: colorInput.value
+    }, appearance);
+  } else {
+    data = Object.assign({
+      kind: 'date',
+      title: titleInput.value.trim(),
+      target: new Date(dateInput.value).toISOString(),
+      mode: modeInput.value,
+      recurrence: recurrenceInput.value,
+      category: categoryInput.value.trim(),
+      color: colorInput.value
+    }, appearance);
+  }
+
   if (editingId) {
     const c = countdowns.find((x) => x.id === editingId);
     Object.assign(c, data, { notified: false, lastOcc: null });
@@ -410,11 +796,34 @@ function syncTrayWraps() {
   $('trayCycleWrap').classList.toggle('hidden', trayModeInput.value !== 'cycle');
 }
 
+function syncDashUploadWrap() {
+  $('dashUploadWrap').classList.toggle('hidden', dashboardBgInput.value !== 'upload');
+}
+
 function openSettings() {
   alwaysOnTopInput.checked = !!settings.alwaysOnTop;
   tmdbKeyInput.value = settings.tmdbApiKey || '';
 
-  // Populate the "specific countdown" picker from current down-mode countdowns.
+  // Appearance
+  buildFontSelect(uiFontInput, false);
+  uiFontInput.value = settings.uiFont || 'system';
+  uiScaleInput.value = String(settings.uiScale || 1);
+  buildBgSelect(dashboardBgInput, { includeAuto: false });
+  if (settings.dashboardBg && settings.dashboardBg.startsWith('media:')) {
+    const opt = document.createElement('option');
+    opt.value = settings.dashboardBg; opt.textContent = 'Current uploaded media';
+    dashboardBgInput.appendChild(opt);
+  }
+  dashboardBgInput.value = settings.dashboardBg || 'preset:nebula';
+  $('dashUploadWrap').classList.add('hidden');
+
+  // Date & time
+  buildTimeZoneSelect(timeZoneInput);
+  dateFormatInput.value = settings.dateFormat || 'system';
+  clockInput.value = settings.clock || 'auto';
+  timeZoneInput.value = settings.timeZone || '';
+
+  // Tray picker
   const opts = countdowns.filter((c) => c.mode === 'down');
   trayIdInput.innerHTML = opts.length
     ? opts.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join('')
@@ -434,9 +843,20 @@ function saveSettings() {
   settings.trayMode = trayModeInput.value;
   settings.trayId = trayIdInput.value || '';
   settings.trayCycleSecs = Math.min(120, Math.max(2, Number(trayCycleInput.value) || 6));
+  settings.uiFont = uiFontInput.value || 'system';
+  settings.uiScale = Number(uiScaleInput.value) || 1;
+  settings.dashboardBg = bgValueOrDefault(dashboardBgInput.value);
+  settings.dateFormat = dateFormatInput.value;
+  settings.clock = clockInput.value;
+  settings.timeZone = timeZoneInput.value || '';
   persistSettings();
+
   window.api.setAlwaysOnTop(settings.alwaysOnTop);
-  lastTraySig = '';            // force the menu-bar title to refresh now
+  applyUiFont();
+  applyUiScale();
+  applyDashboardBg();
+  lastTraySig = '';
+  render();                    // re-render so format/timezone changes show everywhere
   updateTray(Date.now());
   closeSettings();
 }
@@ -457,7 +877,7 @@ function importCountdowns(file) {
       const parsed = JSON.parse(reader.result);
       if (!Array.isArray(parsed)) throw new Error('not an array');
       const added = parsed
-        .filter((c) => c && c.title && c.target && !isNaN(new Date(c.target).getTime()))
+        .filter((c) => c && c.title && (c.kind === 'trading' || (c.target && !isNaN(new Date(c.target).getTime()))))
         .map((c) => normalize({ ...c, id: uid() }));
       countdowns = countdowns.concat(added);
       persist(); render();
@@ -566,6 +986,9 @@ async function init() {
 
   $('versionTag').textContent = 'v' + version;
   applyTheme();
+  applyUiFont();
+  applyUiScale();
+  applyDashboardBg();
   sortSelect.value = settings.sort;
 
   // preset chips
@@ -594,12 +1017,25 @@ async function init() {
   form.addEventListener('submit', saveFromForm);
   $('tmdbSearchBtn').addEventListener('click', runLookup);
   $('tmdbQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runLookup(); } });
+  kindInput.addEventListener('change', () => { syncKindFields(); suggestTradingTitle(); });
+  exchangeInput.addEventListener('change', () => { buildSessionSelect(exchangeInput.value); suggestTradingTitle(true); });
+  sessionInput.addEventListener('change', () => suggestTradingTitle(true));
+  bgInput.addEventListener('change', () => {
+    $('bgUploadWrap').classList.toggle('hidden', bgInput.value !== 'upload');
+    if (bgInput.value === 'upload') bgFile.click();
+  });
+  bgFile.addEventListener('change', () => handleMediaPick(bgFile, bgInput, $('bgUploadWrap')));
 
   // settings modal
   $('settingsBtn').addEventListener('click', openSettings);
   $('settingsCloseBtn').addEventListener('click', closeSettings);
   $('settingsSaveBtn').addEventListener('click', saveSettings);
   trayModeInput.addEventListener('change', syncTrayWraps);
+  dashboardBgInput.addEventListener('change', () => {
+    syncDashUploadWrap();
+    if (dashboardBgInput.value === 'upload') dashboardBgFile.click();
+  });
+  dashboardBgFile.addEventListener('change', () => handleMediaPick(dashboardBgFile, dashboardBgInput, $('dashUploadWrap')));
   $('exportBtn').addEventListener('click', exportCountdowns);
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importCountdowns(e.target.files[0]); e.target.value = ''; });

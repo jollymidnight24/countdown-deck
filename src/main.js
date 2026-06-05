@@ -1,10 +1,18 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
+
+// Custom scheme so user-uploaded background media (stored in userData) can be
+// referenced from the renderer without exposing absolute file paths.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'cdmedia', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+]);
+
+let mediaDir = null;
 
 // ---------------------------------------------------------------------------
 // Persistence helpers: JSON files in the OS-appropriate userData folder.
@@ -42,7 +50,13 @@ const DEFAULT_SETTINGS = {
   tmdbApiKey: '',
   trayMode: 'soonest',   // 'soonest' | 'specific' | 'cycle'
   trayId: '',            // id of the countdown when trayMode === 'specific'
-  trayCycleSecs: 6       // seconds per item when trayMode === 'cycle'
+  trayCycleSecs: 6,      // seconds per item when trayMode === 'cycle'
+  dateFormat: 'system',  // 'system' | 'iso' | 'us' | 'eu' | 'long'
+  clock: 'auto',         // 'auto' | '12' | '24'
+  timeZone: '',          // '' = local, else an IANA timezone
+  uiFont: 'system',      // font family key
+  uiScale: 1,            // overall UI zoom factor
+  dashboardBg: 'preset:nebula' // dashboard background spec
 };
 
 function loadSettings() {
@@ -248,6 +262,24 @@ ipcMain.handle('settings:save', (_e, v) => {
 });
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('window:setAlwaysOnTop', (_e, on) => { if (mainWindow) mainWindow.setAlwaysOnTop(!!on); });
+ipcMain.handle('window:setZoom', (_e, f) => {
+  if (mainWindow) mainWindow.webContents.setZoomFactor(Math.min(2, Math.max(0.6, Number(f) || 1)));
+});
+ipcMain.handle('media:save', (_e, payload) => {
+  try {
+    const { dataURL, ext } = payload || {};
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(dataURL || '');
+    if (!m) return { error: 'bad-data' };
+    const buf = Buffer.from(m[2], 'base64');
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const safeExt = (String(ext || '').replace(/[^a-z0-9]/gi, '').slice(0, 5)) || (m[1].split('/')[1] || 'bin');
+    const file = `${id}.${safeExt}`;
+    fs.writeFileSync(path.join(mediaDir, file), buf);
+    return { url: `cdmedia://media/${file}`, file };
+  } catch (err) {
+    return { error: String(err && err.message ? err.message : err) };
+  }
+});
 ipcMain.handle('tray:update', (_e, summaries) => updateTray(summaries));
 ipcMain.handle('tmdb:search', (_e, query) => tmdbSearch(query));
 ipcMain.handle('tmdb:detail', (_e, payload) => tmdbDetail(payload && payload.type, payload && payload.id));
@@ -295,6 +327,13 @@ function setupAutoUpdates() {
 // Lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
+  mediaDir = path.join(app.getPath('userData'), 'media');
+  try { fs.mkdirSync(mediaDir, { recursive: true }); } catch (_) {}
+  protocol.registerFileProtocol('cdmedia', (request, callback) => {
+    const rel = decodeURIComponent(request.url.replace(/^cdmedia:\/\//, ''));
+    callback({ path: path.join(mediaDir, path.basename(rel)) });
+  });
+
   createWindow();
   createTray();
   setupAutoUpdates();

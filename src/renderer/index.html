@@ -4,11 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob: cdmedia:; media-src 'self' blob: cdmedia:;" />
   <title>Countdown Deck</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body data-theme="dark">
+  <!-- Dashboard background layer (image / animation) -->
+  <div id="bgLayer"><canvas id="bgCanvas"></canvas></div>
+
   <header class="topbar">
     <div class="brand">
       <span class="logo">&#9203;</span>
@@ -53,7 +56,14 @@
     <div class="modal">
       <h2 id="modalTitle">Add countdown</h2>
 
-      <div class="tmdb-box">
+      <label>What are you tracking?
+        <select id="kindInput">
+          <option value="date">A specific date / event</option>
+          <option value="trading">A stock-exchange trading session</option>
+        </select>
+      </label>
+
+      <div id="tmdbBox" class="tmdb-box">
         <label class="inline-label">Auto-find the date — search a movie or TV show (optional)</label>
         <div class="tmdb-row">
           <input id="tmdbQuery" type="text" placeholder="e.g. House of the Dragon" />
@@ -67,9 +77,11 @@
         <label>Title
           <input id="titleInput" type="text" maxlength="80" placeholder="SpaceX IPO" required />
         </label>
-        <div class="form-grid">
+
+        <!-- Date-kind fields -->
+        <div id="dateFields" class="form-grid">
           <label>Target date &amp; time
-            <input id="dateInput" type="datetime-local" required />
+            <input id="dateInput" type="datetime-local" />
           </label>
           <label>Mode
             <select id="modeInput">
@@ -85,6 +97,19 @@
               <option value="yearly">Yearly</option>
             </select>
           </label>
+        </div>
+
+        <!-- Trading-kind fields -->
+        <div id="tradingFields" class="form-grid hidden">
+          <label>Exchange
+            <select id="exchangeInput"></select>
+          </label>
+          <label>Session
+            <select id="sessionInput"></select>
+          </label>
+        </div>
+
+        <div class="form-grid">
           <label>Category
             <input id="categoryInput" type="text" maxlength="40" placeholder="e.g. Space" list="categoryList" />
             <datalist id="categoryList"></datalist>
@@ -93,6 +118,30 @@
             <input id="colorInput" type="color" value="#5b8cff" />
           </label>
         </div>
+
+        <fieldset class="appearance">
+          <legend>Appearance for this countdown</legend>
+          <div class="form-grid">
+            <label>Background
+              <select id="bgInput"></select>
+            </label>
+            <label>Font
+              <select id="fontInput"></select>
+            </label>
+            <label>Text size
+              <select id="fontScaleInput">
+                <option value="0.85">Small</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.2">Large</option>
+                <option value="1.5">Extra large</option>
+              </select>
+            </label>
+            <label id="bgUploadWrap" class="hidden">Upload image / GIF / video
+              <input id="bgFile" type="file" accept="image/*,video/mp4,video/webm" />
+            </label>
+          </div>
+        </fieldset>
+
         <div class="modal-actions">
           <button type="button" id="cancelBtn" class="btn ghost">Cancel</button>
           <button type="submit" class="btn primary">Save</button>
@@ -107,11 +156,56 @@
   <div id="settingsModal" class="modal-overlay hidden">
     <div class="modal">
       <h2>Settings</h2>
+
+      <h3 class="settings-h">Appearance</h3>
+      <div class="form-grid">
+        <label>UI font
+          <select id="uiFontInput"></select>
+        </label>
+        <label>UI size
+          <select id="uiScaleInput">
+            <option value="0.85">Small</option>
+            <option value="1" selected>Normal</option>
+            <option value="1.15">Large</option>
+            <option value="1.3">Extra large</option>
+          </select>
+        </label>
+        <label>Dashboard background
+          <select id="dashboardBgInput"></select>
+        </label>
+        <label id="dashUploadWrap" class="hidden">Upload dashboard media
+          <input id="dashboardBgFile" type="file" accept="image/*,video/mp4,video/webm" />
+        </label>
+      </div>
+
+      <h3 class="settings-h">Date &amp; time</h3>
+      <div class="form-grid">
+        <label>Date / time format
+          <select id="dateFormatInput">
+            <option value="system">System default</option>
+            <option value="iso">ISO (2026-06-21 21:00)</option>
+            <option value="us">US (Jun 21, 2026, 9:00 PM)</option>
+            <option value="eu">European (21 Jun 2026, 21:00)</option>
+            <option value="long">Long (Sunday, June 21, 2026)</option>
+          </select>
+        </label>
+        <label>Clock
+          <select id="clockInput">
+            <option value="auto">Match format</option>
+            <option value="12">12-hour</option>
+            <option value="24">24-hour</option>
+          </select>
+        </label>
+        <label>Display timezone
+          <select id="timeZoneInput"></select>
+        </label>
+      </div>
+
+      <h3 class="settings-h">Window &amp; lookups</h3>
       <label class="switch-row">
         <span>Keep window always on top</span>
         <input id="alwaysOnTopInput" type="checkbox" />
       </label>
-
       <label>Menu-bar / tray shows
         <select id="trayModeInput">
           <option value="soonest">Soonest countdown</option>
@@ -125,12 +219,11 @@
       <label id="trayCycleWrap" class="hidden">Cycle every (seconds)
         <input id="trayCycleInput" type="number" min="2" max="120" value="6" />
       </label>
-
-      <hr />
-      <label>TMDB API key (for movie/TV lookups)
+      <label>TMDB API key (movies only)
         <input id="tmdbKeyInput" type="text" placeholder="Paste your free TMDB v3 API key" />
       </label>
-      <p class="hint">Get a free key at themoviedb.org → Settings → API. Stored locally on your machine only.</p>
+      <p class="hint">Get a free key at themoviedb.org → Settings → API. Stored locally on your machine only. (TV uses TVmaze — no key needed.)</p>
+
       <hr />
       <div class="io-row">
         <button type="button" id="exportBtn" class="btn ghost">Export countdowns…</button>

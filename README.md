@@ -14,7 +14,19 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Menu-bar / system-tray view** with your choice of what to show: the **soonest** countdown, a **specific** one you pick, or **cycle** through them all at an interval you set. Plus an optional **always-on-top** window.
 - **Auto-find dates** — search a movie or TV show and the app fills in the real date automatically. **TV shows use [TVmaze](https://www.tvmaze.com/api)** (free, no key) to get the next episode's **exact air time including timezone** (e.g. a 9:00 PM ET premiere lands precisely). **Movies use TMDB** release dates (needs a free key). Manual entry always remains available.
 - **Import / export** your countdowns to a JSON file.
+- **Trading-session countdowns** for major exchanges (NYSE, Nasdaq, TSX, LSE, XETRA, Euronext, TSE, HKEX, SSE, NSE, ASX). Each session — pre-market open, market open, close, post-market close — counts down in the exchange's own timezone, automatically rolls to the next trading day, and **skips weekends (plus US market holidays for NYSE/Nasdaq)**.
+- **Date/time format and display timezone** of your choice (System, ISO, US, European, or Long; 12/24-hour; any timezone), applied across every countdown.
+- **Per-countdown backgrounds** — auto gradient from the accent color, a bundled generated image, an animated gradient/canvas, or **your own uploaded image / GIF / video**. Same options for the **dashboard background**, generated and set by default.
+- **Fonts and sizes** — pick the overall UI font and size, and a font and text size per countdown.
 - A custom app icon, and **full auto-update** via `electron-updater` against GitHub Releases, with an in-app badge and one-click "restart to update."
+
+### Trading sessions
+
+US exchanges (NYSE/Nasdaq) use a built-in 2026–27 market-holiday calendar so their countdowns skip those days as well as weekends; other exchanges skip weekends only. Session times are the regular cash-session hours per exchange and don't model half-days or lunch breaks. The holiday list is hard-coded in `src/renderer/app.js` (`US_HOLIDAYS`) — update it each year.
+
+### Backgrounds & uploads
+
+Bundled backgrounds live in `src/assets/backgrounds/`. Uploaded media is copied into the app's user-data folder and served through a private `cdmedia://` protocol, so your files never leak absolute paths into the saved data. Animated options are CSS/canvas (GPU-friendly) and honor "reduce motion" system settings.
 
 ### Where the dates come from
 
