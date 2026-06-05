@@ -1,0 +1,63 @@
+{
+  "name": "countdown-deck",
+  "productName": "Countdown Deck",
+  "version": "1.0.0",
+  "description": "A cross-platform desktop dashboard of live countdown timers.",
+  "author": {
+    "name": "Justin Jaudines",
+    "email": "justinjaudines@gmail.com"
+  },
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "release": "electron-builder --publish always"
+  },
+  "build": {
+    "appId": "com.justinjaudines.countdowndeck",
+    "productName": "Countdown Deck",
+    "files": [
+      "src/**/*",
+      "!**/*.map"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jollymidnight24",
+        "repo": "countdown-deck"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Utility",
+      "target": ["AppImage", "deb"]
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.2.1"
+  }
+}

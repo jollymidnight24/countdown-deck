@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>Countdown Deck</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">&#9203;</span>
+      <h1>Countdown Deck</h1>
+    </div>
+    <div class="topbar-actions">
+      <div id="updateBadge" class="update-badge hidden"></div>
+      <button id="checkUpdatesBtn" class="btn ghost" title="Check for updates">Check for updates</button>
+      <span id="versionTag" class="version-tag"></span>
+      <button id="addBtn" class="btn primary">+ Add countdown</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="emptyState" class="empty-state hidden">
+      <p>No countdowns yet.</p>
+      <button id="emptyAddBtn" class="btn primary">Add your first countdown</button>
+      <div class="preset-row" id="presetRow"></div>
+    </section>
+
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div id="modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="modalTitle">Add countdown</h2>
+      <form id="countdownForm">
+        <label>
+          Title
+          <input id="titleInput" type="text" maxlength="80" placeholder="SpaceX IPO" required />
+        </label>
+        <label>
+          Target date &amp; time
+          <input id="dateInput" type="datetime-local" required />
+        </label>
+        <label>
+          Accent color
+          <input id="colorInput" type="color" value="#5b8cff" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="cancelBtn" class="btn ghost">Cancel</button>
+          <button type="submit" id="saveBtn" class="btn primary">Save</button>
+        </div>
+      </form>
+      <div class="preset-row" id="modalPresetRow">
+        <span class="preset-label">Quick add:</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
