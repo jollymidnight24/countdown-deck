@@ -7,6 +7,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write   # required so the GITHUB_TOKEN can create the Release
+
 jobs:
   release:
     runs-on: ${{ matrix.os }}
