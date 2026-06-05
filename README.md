@@ -22,6 +22,11 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Date/time format and display timezone** of your choice (System, ISO, US, European, or Long; 12/24-hour; any timezone), applied across every countdown.
 - **Per-countdown backgrounds** — auto gradient from the accent color, a bundled generated image, an animated gradient/canvas, or **your own uploaded image / GIF / video**. Same options for the **dashboard background**, generated and set by default.
 - **Fonts and sizes** — pick the overall UI font and size, and a font and text size per countdown.
+- **Theme palettes & accent** — six curated palettes (Midnight, Daylight, Slate, Mocha, Forest, Rose) plus a global accent-color override.
+- **View density & grouping** — switch between Cards, Compact, and List layouts, and optionally group countdowns into collapsible category sections.
+- **Animated digits & urgency cues** — digits flip as they change, and timer numbers shift to amber (under an hour) then red (final minute).
+- **Per-card background dim & blur** sliders so text stays readable over any image, plus ten bundled backgrounds.
+- **Polish** — first-run welcome, empty-state illustration, smooth modal transitions, and keyboard shortcuts (**N** new, **/** search, **Esc** close).
 - A custom app icon, and **full auto-update** via `electron-updater` against GitHub Releases, with an in-app badge and one-click "restart to update."
 
 ### Trading sessions

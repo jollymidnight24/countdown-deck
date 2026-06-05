@@ -61,7 +61,12 @@ const DEFAULT_SETTINGS = {
   quietHoursEnabled: false,
   quietStart: '22:00',
   quietEnd: '07:00',
-  snoozeMinutes: 5
+  snoozeMinutes: 5,
+  accent: '',            // global accent color override ('' = palette default)
+  viewMode: 'cards',     // 'cards' | 'compact' | 'list'
+  groupByCategory: false,
+  collapsedGroups: [],   // category names collapsed in grouped view
+  onboarded: false       // first-run welcome shown
 };
 
 function loadSettings() {

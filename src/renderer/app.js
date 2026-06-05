@@ -9,7 +9,8 @@ let settings = {
   trayMode: 'soonest', trayId: '', trayCycleSecs: 6,
   dateFormat: 'system', clock: 'auto', timeZone: '',
   uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula', dnd: false,
-  quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5
+  quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5,
+  accent: '', viewMode: 'cards', groupByCategory: false, collapsedGroups: [], onboarded: false
 };
 let lastTraySig = '';
 let focusId = null;
@@ -38,7 +39,8 @@ const FONT_LABELS = { system: 'System sans', rounded: 'Rounded', serif: 'Serif',
 
 const PRESET_BGS = [
   { id: 'aurora', name: 'Aurora' }, { id: 'nebula', name: 'Nebula' }, { id: 'sunset', name: 'Sunset' },
-  { id: 'ocean', name: 'Ocean' }, { id: 'mesh', name: 'Mesh' }, { id: 'cyber', name: 'Cyber grid' }
+  { id: 'ocean', name: 'Ocean' }, { id: 'mesh', name: 'Mesh' }, { id: 'cyber', name: 'Cyber grid' },
+  { id: 'forest', name: 'Forest' }, { id: 'rose', name: 'Rose' }, { id: 'mono', name: 'Mono' }, { id: 'sunrise', name: 'Sunrise' }
 ];
 const ANIM_BGS = [
   { id: 'aurora', name: 'Aurora (animated)' }, { id: 'ocean', name: 'Ocean (animated)' },
@@ -208,6 +210,7 @@ const emptyState = $('emptyState');
 const searchInput = $('searchInput');
 const sortSelect = $('sortSelect');
 const categoryFilter = $('categoryFilter');
+const viewSelect = $('viewSelect');
 
 // add/edit modal
 const modal = $('modal');
@@ -227,6 +230,8 @@ const bgInput = $('bgInput');
 const fontInput = $('fontInput');
 const fontScaleInput = $('fontScaleInput');
 const bgFile = $('bgFile');
+const bgDimInput = $('bgDimInput');
+const bgBlurInput = $('bgBlurInput');
 const alertSoundInput = $('alertSoundInput');
 const alertSoundFile = $('alertSoundFile');
 const alertBannerInput = $('alertBannerInput');
@@ -251,6 +256,8 @@ const dashboardBgFile = $('dashboardBgFile');
 const dateFormatInput = $('dateFormatInput');
 const clockInput = $('clockInput');
 const timeZoneInput = $('timeZoneInput');
+const paletteInput = $('paletteInput');
+const accentInput = $('accentInput');
 
 // ===========================================================================
 // Helpers
@@ -280,7 +287,9 @@ function normalize(c) {
     alertBanner: c.alertBanner !== false,   // default on (preserves prior behavior)
     alertFlash: !!c.alertFlash,
     milestones: Array.isArray(c.milestones) ? c.milestones : [],   // minutes-before-end reminders
-    createdAt: c.createdAt || Date.now()
+    createdAt: c.createdAt || Date.now(),
+    bgDim: c.bgDim == null ? 60 : Number(c.bgDim),
+    bgBlur: c.bgBlur == null ? 0 : Number(c.bgBlur)
   };
 }
 
@@ -440,23 +449,16 @@ function visibleCountdowns() {
 // ===========================================================================
 // Rendering
 // ===========================================================================
-function render() {
-  refreshCategoryControls();
-  const list = visibleCountdowns();
-  emptyState.classList.toggle('hidden', countdowns.length !== 0);
-  grid.classList.toggle('hidden', countdowns.length === 0);
+function createCard(c) {
+  const card = document.createElement('div');
+  card.className = 'card' + (c.pinned ? ' pinned' : '');
+  card.style.setProperty('--card-accent', c.color);
+  card.dataset.id = c.id;
+  card.draggable = !settings.groupByCategory;
 
-  grid.innerHTML = '';
-  for (const c of list) {
-    const card = document.createElement('div');
-    card.className = 'card' + (c.pinned ? ' pinned' : '');
-    card.style.setProperty('--card-accent', c.color);
-    card.dataset.id = c.id;
-    card.draggable = true;
-
-    const tag = c.category ? `<span class="tag">${escapeHtml(c.category)}</span>` : '';
-    const modePill = c.mode === 'up' ? '<span class="mode-pill">counting up</span>' : '';
-    card.innerHTML = `
+  const tag = c.category ? `<span class="tag">${escapeHtml(c.category)}</span>` : '';
+  const modePill = c.mode === 'up' ? '<span class="mode-pill">counting up</span>' : '';
+  card.innerHTML = `
       <div class="card-head">
         <div>
           <div class="card-title">
@@ -484,17 +486,64 @@ function render() {
       <div class="done-banner hidden">🎉 It's here!</div>
       <div class="card-progress"><div class="card-progress-fill"></div></div>`;
 
-    card.querySelector('.t-text').textContent = c.title;
-    card.querySelector('.t-target').textContent = formatTarget(c);
-    applyCardAppearance(card, c);
-    grid.appendChild(card);
+  card.querySelector('.t-text').textContent = c.title;
+  card.querySelector('.t-target').textContent = formatTarget(c);
+  applyCardAppearance(card, c);
+  return card;
+}
+
+function render() {
+  refreshCategoryControls();
+  const list = visibleCountdowns();
+  emptyState.classList.toggle('hidden', countdowns.length !== 0);
+  grid.classList.toggle('hidden', countdowns.length === 0);
+  grid.innerHTML = '';
+
+  const viewClass = settings.viewMode === 'compact' ? 'view-compact' : settings.viewMode === 'list' ? 'view-list' : '';
+
+  if (settings.groupByCategory) {
+    grid.className = 'grid grouped';                 // container holds sections
+    const groups = new Map();
+    for (const c of list) {
+      const key = c.category || 'Uncategorized';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    for (const [name, items] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const collapsed = (settings.collapsedGroups || []).includes(name);
+      const section = document.createElement('div');
+      section.className = 'group' + (collapsed ? ' collapsed' : '');
+      section.dataset.group = name;
+      const head = document.createElement('div');
+      head.className = 'group-head';
+      head.innerHTML = `<span class="chev">▾</span> <span>${escapeHtml(name)}</span> <span class="group-count">${items.length}</span>`;
+      head.addEventListener('click', () => toggleGroup(name));
+      const inner = document.createElement('div');
+      inner.className = 'grid ' + viewClass;
+      for (const c of items) inner.appendChild(createCard(c));
+      section.appendChild(head);
+      section.appendChild(inner);
+      grid.appendChild(section);
+    }
+  } else {
+    grid.className = 'grid ' + viewClass;
+    for (const c of list) grid.appendChild(createCard(c));
   }
   tick();
+}
+
+function toggleGroup(name) {
+  const set = new Set(settings.collapsedGroups || []);
+  if (set.has(name)) set.delete(name); else set.add(name);
+  settings.collapsedGroups = [...set];
+  persistSettings(); render();
 }
 
 // Apply a countdown's background + font choices to its card element.
 function applyCardAppearance(card, c) {
   card.style.setProperty('--card-scale', c.fontScale || 1);
+  card.style.setProperty('--card-dim', (c.bgDim == null ? 60 : c.bgDim) + '%');
+  card.style.setProperty('--card-blur', (c.bgBlur || 0) + 'px');
   card.style.fontFamily = c.fontFamily && FONTS[c.fontFamily] ? FONTS[c.fontFamily] : '';
 
   // reset
@@ -513,8 +562,12 @@ function applyCardAppearance(card, c) {
   }
   const [type, val] = spec.split(':');
   if (type === 'preset') {
+    // use a media <img> so blur/dim apply uniformly
     card.classList.add('has-bg');
-    card.style.backgroundImage = `url("assets/backgrounds/${val}.jpg")`;
+    const img = document.createElement('img');
+    img.className = 'card-media';
+    img.src = `assets/backgrounds/${val}.jpg`;
+    card.insertBefore(img, card.firstChild);
   } else if (type === 'anim') {
     card.classList.add('has-bg', 'animbg-' + val);
   } else if (type === 'media') {
@@ -533,6 +586,15 @@ function applyCardAppearance(card, c) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+// Update a digit element, animating only when the value actually changes.
+function setNum(el, text) {
+  if (!el || el.textContent === text) return;
+  el.textContent = text;
+  el.classList.remove('flip');
+  void el.offsetWidth;   // restart the CSS animation
+  el.classList.add('flip');
 }
 
 function tick() {
@@ -583,10 +645,20 @@ function tick() {
     const done = b.done;
     card.classList.toggle('done', done);
     card.querySelector('.done-banner').classList.toggle('hidden', !done);
-    card.querySelector('[data-u="d"]').textContent = String(b.d);
-    card.querySelector('[data-u="h"]').textContent = pad(b.h);
-    card.querySelector('[data-u="m"]').textContent = pad(b.m);
-    card.querySelector('[data-u="s"]').textContent = pad(b.s);
+    setNum(card.querySelector('[data-u="d"]'), String(b.d));
+    setNum(card.querySelector('[data-u="h"]'), pad(b.h));
+    setNum(card.querySelector('[data-u="m"]'), pad(b.m));
+    setNum(card.querySelector('[data-u="s"]'), pad(b.s));
+
+    // urgency color shift as zero nears (down mode only)
+    let soon = false, imminent = false;
+    if (c.mode === 'down' && !done) {
+      const rem = effectiveTargetMs(c, now) - now;
+      imminent = rem > 0 && rem <= 60000;
+      soon = rem > 60000 && rem <= 3600000;
+    }
+    card.classList.toggle('urgent-now', imminent);
+    card.classList.toggle('urgent-soon', soon);
 
     const frac = progressFraction(c, now);
     const bar = card.querySelector('.card-progress');
@@ -958,6 +1030,8 @@ function openModal(editId = null) {
     bgInput.value = c.bg || 'auto';
     fontInput.value = c.fontFamily || '';
     fontScaleInput.value = String(c.fontScale || 1);
+    bgDimInput.value = c.bgDim == null ? 60 : c.bgDim;
+    bgBlurInput.value = c.bgBlur || 0;
     if (c.alertSound && c.alertSound.startsWith('media:')) {
       const o = document.createElement('option');
       o.value = c.alertSound; o.textContent = 'Current uploaded sound';
@@ -979,6 +1053,8 @@ function openModal(editId = null) {
     bgInput.value = 'auto';
     fontInput.value = '';
     fontScaleInput.value = '1';
+    bgDimInput.value = 60;
+    bgBlurInput.value = 0;
     alertSoundInput.value = 'none';
     alertBannerInput.checked = true;
     alertFlashInput.checked = false;
@@ -1003,6 +1079,8 @@ function saveFromForm(evt) {
     bg: bgValueOrDefault(bgInput.value),
     fontFamily: fontInput.value,
     fontScale: Number(fontScaleInput.value) || 1,
+    bgDim: Number(bgDimInput.value),
+    bgBlur: Number(bgBlurInput.value),
     alertSound: soundValueOrNone(alertSoundInput.value),
     alertBanner: alertBannerInput.checked,
     alertFlash: alertFlashInput.checked,
@@ -1116,9 +1194,19 @@ function wireDrag() {
 // ===========================================================================
 // Settings + import/export
 // ===========================================================================
+const LIGHT_PALETTES = ['light', 'rose'];
+function currentAccentHex() {
+  const v = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v : '#5b8cff';
+}
 function applyTheme() {
   document.body.dataset.theme = settings.theme;
-  $('themeBtn').innerHTML = settings.theme === 'dark' ? '&#9788;' : '&#9790;'; // sun / moon
+  // accent override (empty = palette default)
+  if (settings.accent) document.body.style.setProperty('--accent', settings.accent);
+  else document.body.style.removeProperty('--accent');
+  // toggle button shows what it'll switch to; reflects current light/dark base
+  const isLight = LIGHT_PALETTES.includes(settings.theme);
+  $('themeBtn').innerHTML = isLight ? '&#9790;' : '&#9788;'; // moon when light, sun when dark
 }
 
 function applyDnd() {
@@ -1142,6 +1230,8 @@ function openSettings() {
   tmdbKeyInput.value = settings.tmdbApiKey || '';
 
   // Appearance
+  paletteInput.value = settings.theme || 'dark';
+  accentInput.value = settings.accent || currentAccentHex();
   buildFontSelect(uiFontInput, false);
   uiFontInput.value = settings.uiFont || 'system';
   uiScaleInput.value = String(settings.uiScale || 1);
@@ -1338,6 +1428,8 @@ async function init() {
   applyUiScale();
   applyDashboardBg();
   sortSelect.value = settings.sort;
+  viewSelect.value = settings.viewMode || 'cards';
+  $('groupBtn').classList.toggle('active', settings.groupByCategory);
 
   // preset chips (date presets + trading-session presets)
   for (const container of [$('presetRow'), $('modalPresetRow')]) {
@@ -1362,9 +1454,22 @@ async function init() {
   categoryFilter.addEventListener('change', render);
   sortSelect.addEventListener('change', () => { settings.sort = sortSelect.value; persistSettings(); render(); });
   $('themeBtn').addEventListener('click', () => {
-    settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
+    settings.theme = LIGHT_PALETTES.includes(settings.theme) ? 'dark' : 'light';
     persistSettings(); applyTheme();
   });
+  viewSelect.addEventListener('change', () => { settings.viewMode = viewSelect.value; persistSettings(); render(); });
+  $('groupBtn').addEventListener('click', () => {
+    settings.groupByCategory = !settings.groupByCategory;
+    $('groupBtn').classList.toggle('active', settings.groupByCategory);
+    persistSettings(); render();
+  });
+  paletteInput.addEventListener('change', () => { settings.theme = paletteInput.value; persistSettings(); applyTheme(); });
+  accentInput.addEventListener('input', () => { settings.accent = accentInput.value; persistSettings(); applyTheme(); });
+  $('accentReset').addEventListener('click', () => {
+    settings.accent = ''; persistSettings(); applyTheme();
+    accentInput.value = currentAccentHex();
+  });
+  $('welcomeClose').addEventListener('click', () => { $('welcomeOverlay').classList.add('hidden'); settings.onboarded = true; persistSettings(); });
   $('dndBtn').addEventListener('click', () => {
     settings.dnd = !settings.dnd;
     persistSettings(); applyDnd();
@@ -1428,6 +1533,14 @@ async function init() {
   // overlays
   for (const m of [modal, settingsModal]) m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); closeFocus(); } });
+  // Global shortcuts: N = new, / = search (ignored while typing or in a modal)
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (!modal.classList.contains('hidden') || !settingsModal.classList.contains('hidden')) return;
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openModal(); }
+    else if (e.key === '/') { e.preventDefault(); searchInput.focus(); }
+  });
 
   // updates
   window.api.onUpdateStatus(handleUpdateStatus);
@@ -1440,6 +1553,7 @@ async function init() {
 
   window.api.setAlwaysOnTop(settings.alwaysOnTop);
   render();
+  if (!settings.onboarded) $('welcomeOverlay').classList.remove('hidden');
   if (tickHandle) clearInterval(tickHandle);
   tickHandle = setInterval(tick, 1000);
 }

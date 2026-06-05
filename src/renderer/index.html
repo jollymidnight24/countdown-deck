@@ -56,6 +56,12 @@
       <select id="categoryFilter" class="select" title="Filter by category">
         <option value="">All categories</option>
       </select>
+      <select id="viewSelect" class="select" title="View density">
+        <option value="cards">Cards</option>
+        <option value="compact">Compact</option>
+        <option value="list">List</option>
+      </select>
+      <button id="groupBtn" class="btn ghost icon-btn" title="Group by category">&#9638;</button>
       <button id="dndBtn" class="btn ghost icon-btn" title="Mute all alerts (Do Not Disturb)">&#128276;</button>
       <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
       <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
@@ -73,6 +79,16 @@
 
   <main>
     <section id="emptyState" class="empty-state hidden">
+      <svg class="empty-art" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <rect x="10" y="10" width="100" height="100" rx="26" fill="var(--card-2)" stroke="var(--line)"/>
+        <rect x="34" y="28" width="52" height="7" rx="3.5" fill="var(--accent)" opacity="0.9"/>
+        <rect x="34" y="85" width="52" height="7" rx="3.5" fill="var(--accent)" opacity="0.9"/>
+        <path d="M38 33 L82 33 L64 60 Z" fill="none" stroke="var(--accent)" stroke-width="3"/>
+        <path d="M64 60 L82 87 L38 87 Z" fill="none" stroke="var(--accent)" stroke-width="3"/>
+        <path d="M52 47 L76 47 L64 60 Z" fill="#ffd166"/>
+        <path d="M48 87 L80 87 L64 72 Z" fill="#ffd166"/>
+        <line x1="64" y1="60" x2="64" y2="78" stroke="#ffd166" stroke-width="3"/>
+      </svg>
       <p>No countdowns yet.</p>
       <button id="emptyAddBtn" class="btn primary">Add your first countdown</button>
       <div class="preset-row" id="presetRow"></div>
@@ -191,6 +207,12 @@
             <label id="bgUploadWrap" class="hidden">Upload image / GIF / video
               <input id="bgFile" type="file" accept="image/*,video/mp4,video/webm" />
             </label>
+            <label>Background dim
+              <input id="bgDimInput" type="range" min="0" max="85" value="60" />
+            </label>
+            <label>Background blur
+              <input id="bgBlurInput" type="range" min="0" max="12" value="0" />
+            </label>
           </div>
         </fieldset>
 
@@ -211,6 +233,22 @@
 
       <h3 class="settings-h">Appearance</h3>
       <div class="form-grid">
+        <label>Theme palette
+          <select id="paletteInput">
+            <option value="dark">Midnight (dark)</option>
+            <option value="light">Daylight (light)</option>
+            <option value="slate">Slate</option>
+            <option value="mocha">Mocha</option>
+            <option value="forest">Forest</option>
+            <option value="rose">Rose</option>
+          </select>
+        </label>
+        <label>Accent color
+          <input id="accentInput" type="color" />
+        </label>
+        <label>&nbsp;
+          <button type="button" id="accentReset" class="btn ghost" style="width:100%">Reset accent to palette</button>
+        </label>
         <label>UI font
           <select id="uiFontInput"></select>
         </label>
@@ -293,6 +331,24 @@
       <div class="modal-actions">
         <button type="button" id="settingsCloseBtn" class="btn ghost">Close</button>
         <button type="button" id="settingsSaveBtn" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-run welcome -->
+  <div id="welcomeOverlay" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Welcome to Countdown Deck 👋</h2>
+      <p class="hint">A quick tour of what you can do:</p>
+      <ul style="line-height:1.7; color:var(--muted); padding-left:20px;">
+        <li>Click <strong>+ Add</strong> to track any date, a recurring event, or a stock-exchange session.</li>
+        <li>Search a movie or TV show to auto-fill its release/air date.</li>
+        <li>Click a card to open <strong>focus mode</strong>; use the 🔔 to test its alerts.</li>
+        <li>Pick backgrounds, fonts, themes, and view density to taste.</li>
+        <li>Shortcuts: <strong>N</strong> = new, <strong>/</strong> = search, <strong>Esc</strong> = close.</li>
+      </ul>
+      <div class="modal-actions">
+        <button id="welcomeClose" class="btn primary">Get started</button>
       </div>
     </div>
   </div>
