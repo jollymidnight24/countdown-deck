@@ -579,8 +579,22 @@ function toLocalInputValue(iso) {
   return local.toISOString().slice(0, 16);
 }
 
-const persist = () => window.api.saveCountdowns(countdowns);
+const persist = () => { window.api.saveCountdowns(countdowns); if (window.cdSync) window.cdSync.pushSoon(); };
 const persistSettings = () => window.api.saveSettings(settings);
+
+// ---- cloud sync (Supabase) -------------------------------------------------
+function renderSyncStatus(st) {
+  const el = $('syncStatus'); if (!el) return;
+  if (st.error) el.textContent = '⚠ ' + st.error;
+  else if (st.loggedIn) el.textContent = `Signed in as ${st.email}${st.syncedAt ? ` · last sync ${new Date(st.syncedAt).toLocaleTimeString()}` : ''}${st.note ? ` · ${st.note}` : ''}`;
+  else el.textContent = 'Not signed in.';
+  $('syncLoginBtn').classList.toggle('hidden', st.loggedIn);
+  $('syncSignupBtn').classList.toggle('hidden', st.loggedIn);
+  $('syncNowBtn').classList.toggle('hidden', !st.loggedIn);
+  $('syncLogoutBtn').classList.toggle('hidden', !st.loggedIn);
+}
+function applyRemoteData(arr) { countdowns = arr.map(normalize); window.api.saveCountdowns(countdowns); render(); }
+function saveSyncConfig() { window.cdSync.setConfig($('syncUrlInput').value.trim(), $('syncKeyInput').value.trim()); }
 
 // ===========================================================================
 // Derived views (search / filter / sort / pin)
@@ -1769,6 +1783,13 @@ function openSettings() {
   trayCycleInput.value = settings.trayCycleSecs || 6;
   syncTrayWraps();
 
+  if (window.cdSync) {
+    const cfg = window.cdSync.getConfig();
+    $('syncUrlInput').value = cfg.url || '';
+    $('syncKeyInput').value = cfg.key || '';
+    window.cdSync.status();
+  }
+
   settingsModal.classList.remove('hidden');
 }
 function closeSettings() { settingsModal.classList.add('hidden'); }
@@ -2042,6 +2063,22 @@ async function init() {
 
   // Open a countdown in focus mode when the tray popover requests it
   window.api.onFocusCountdown((id) => openFocus(id));
+
+  // Cloud sync
+  window.cdSync = createCDSync({ getData: () => countdowns, setData: applyRemoteData, onStatus: renderSyncStatus });
+  const readCreds = () => ({ email: $('syncEmailInput').value.trim(), pw: $('syncPasswordInput').value });
+  $('syncSignupBtn').addEventListener('click', async () => {
+    saveSyncConfig(); const { email, pw } = readCreds();
+    try { const r = await window.cdSync.signUp(email, pw); $('syncStatus').textContent = r.confirmed ? 'Account created and signed in.' : 'Account created — check your email to confirm, then log in.'; }
+    catch (e) { $('syncStatus').textContent = '⚠ ' + e.message; }
+  });
+  $('syncLoginBtn').addEventListener('click', async () => {
+    saveSyncConfig(); const { email, pw } = readCreds();
+    try { await window.cdSync.signIn(email, pw); } catch (e) { $('syncStatus').textContent = '⚠ ' + e.message; }
+  });
+  $('syncLogoutBtn').addEventListener('click', () => window.cdSync.signOut());
+  $('syncNowBtn').addEventListener('click', () => window.cdSync.syncNow());
+  window.cdSync.startAuto();
 
   // Command palette
   $('paletteInputBox').addEventListener('input', (e) => { paletteSel = 0; renderPalette(e.target.value); });

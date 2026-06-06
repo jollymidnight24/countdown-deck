@@ -98,7 +98,18 @@ function load() {
   try { countdowns = JSON.parse(localStorage.getItem('cd_countdowns') || '[]'); } catch (_) { countdowns = []; }
   try { settings = Object.assign(settings, JSON.parse(localStorage.getItem('cd_settings') || '{}')); } catch (_) {}
 }
-function save() { localStorage.setItem('cd_countdowns', JSON.stringify(countdowns)); }
+function save() { localStorage.setItem('cd_countdowns', JSON.stringify(countdowns)); if (window.cdSync) window.cdSync.pushSoon(); }
+function applyRemote(arr) { countdowns = arr.map(normalize); localStorage.setItem('cd_countdowns', JSON.stringify(countdowns)); render(); }
+function renderSyncStatus(st) {
+  const el = $('syncStatus'); if (!el) return;
+  if (st.error) el.textContent = '⚠ ' + st.error;
+  else if (st.loggedIn) el.textContent = `Signed in as ${st.email}${st.syncedAt ? ' · synced ' + new Date(st.syncedAt).toLocaleTimeString() : ''}${st.note ? ' · ' + st.note : ''}`;
+  else el.textContent = 'Not signed in.';
+  $('syncLoginBtn').classList.toggle('hidden', st.loggedIn);
+  $('syncSignupBtn').classList.toggle('hidden', st.loggedIn);
+  $('syncNowBtn').classList.toggle('hidden', !st.loggedIn);
+  $('syncLogoutBtn').classList.toggle('hidden', !st.loggedIn);
+}
 function saveSettings() { localStorage.setItem('cd_settings', JSON.stringify(settings)); }
 
 function normalize(c) {
@@ -242,6 +253,24 @@ function init() {
     if (btn.dataset.act === 'edit') openSheet(id);
     else if (btn.dataset.act === 'del') { countdowns = countdowns.filter((c) => c.id !== id); save(); render(); }
   });
+
+  // Cloud sync
+  window.cdSync = createCDSync({ getData: () => countdowns, setData: applyRemote, onStatus: renderSyncStatus });
+  const openAcct = () => {
+    const cfg = window.cdSync.getConfig();
+    $('syncUrlInput').value = cfg.url || ''; $('syncKeyInput').value = cfg.key || '';
+    window.cdSync.status(); $('acctSheet').classList.remove('hidden');
+  };
+  const saveCfg = () => window.cdSync.setConfig($('syncUrlInput').value.trim(), $('syncKeyInput').value.trim());
+  const creds = () => ({ email: $('syncEmailInput').value.trim(), pw: $('syncPasswordInput').value });
+  $('accountBtn').addEventListener('click', openAcct);
+  $('acctClose').addEventListener('click', () => $('acctSheet').classList.add('hidden'));
+  $('acctSheet').addEventListener('click', (e) => { if (e.target.id === 'acctSheet') $('acctSheet').classList.add('hidden'); });
+  $('syncSignupBtn').addEventListener('click', async () => { saveCfg(); const { email, pw } = creds(); try { const r = await window.cdSync.signUp(email, pw); $('syncStatus').textContent = r.confirmed ? 'Account created and signed in.' : 'Account created — confirm via email, then log in.'; } catch (e) { $('syncStatus').textContent = '⚠ ' + e.message; } });
+  $('syncLoginBtn').addEventListener('click', async () => { saveCfg(); const { email, pw } = creds(); try { await window.cdSync.signIn(email, pw); } catch (e) { $('syncStatus').textContent = '⚠ ' + e.message; } });
+  $('syncLogoutBtn').addEventListener('click', () => window.cdSync.signOut());
+  $('syncNowBtn').addEventListener('click', () => window.cdSync.syncNow());
+  window.cdSync.startAuto();
 
   render();
   setInterval(tick, 1000);

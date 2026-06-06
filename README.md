@@ -83,6 +83,10 @@ When you pick a search result, the app calls TMDB again to get the **real next d
 
 Because of the tray view, closing the window **hides** the app to the menu bar/tray rather than quitting it. Use the tray menu's **Quit** (or Cmd/Ctrl+Q) to fully exit.
 
+## Cross-device sync
+
+Sign in with email/password to sync your countdowns across the desktop app and the iPhone PWA (and any other device). It uses a free Supabase project you create — see [`SYNC.md`](SYNC.md) for the ~10-minute setup. Without sign-in, the app works exactly as before with data stored locally per device.
+
 ## Mobile (PWA) & code signing
 
 - **Mobile companion:** an installable Progressive Web App lives in [`pwa/`](pwa/README.md) — the same countdown engine (date, count-up, recurring, trading sessions, world clocks, natural-language entry) running in the browser with offline support and local storage. Host that folder over https and add it to your phone's home screen.

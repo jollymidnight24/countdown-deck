@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob: cdmedia:; media-src 'self' blob: cdmedia:;" />
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob: cdmedia:; media-src 'self' blob: cdmedia:; connect-src 'self' https://*.supabase.co;" />
   <title>Countdown Deck</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -446,7 +446,26 @@
       <div id="shortcutList"></div>
 
       </details>
-      <details class="settings-section"><summary>Backup &amp; sync</summary>
+      <details class="settings-section"><summary>Account &amp; cloud sync</summary>
+        <p class="hint">Sign in to sync your countdowns across devices (desktop + phone). Paste your free Supabase project's URL and anon key (see SYNC.md), then sign up or log in.</p>
+        <div class="form-grid">
+          <label>Supabase URL<input id="syncUrlInput" type="text" placeholder="https://xxxx.supabase.co" /></label>
+          <label>Supabase anon key<input id="syncKeyInput" type="text" placeholder="eyJhbGci…" /></label>
+        </div>
+        <div class="form-grid">
+          <label>Email<input id="syncEmailInput" type="email" placeholder="you@example.com" /></label>
+          <label>Password<input id="syncPasswordInput" type="password" placeholder="••••••••" /></label>
+        </div>
+        <div class="io-row">
+          <button type="button" id="syncSignupBtn" class="btn ghost">Sign up</button>
+          <button type="button" id="syncLoginBtn" class="btn primary">Log in</button>
+          <button type="button" id="syncNowBtn" class="btn ghost hidden">Sync now</button>
+          <button type="button" id="syncLogoutBtn" class="btn ghost hidden">Log out</button>
+        </div>
+        <p class="hint" id="syncStatus">Not signed in.</p>
+      </details>
+
+      <details class="settings-section"><summary>Backup &amp; sync (local)</summary>
       <p class="hint" id="backupFolderLabel">No backup folder set.</p>
       <div class="io-row">
         <button type="button" id="backupChooseBtn" class="btn ghost">Choose backup folder…</button>
@@ -500,6 +519,7 @@
     </div>
   </div>
 
+  <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

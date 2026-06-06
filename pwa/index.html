@@ -15,6 +15,7 @@
   <header class="topbar">
     <button class="brand" id="homeBtn"><span class="mono">CD</span> Countdown Deck</button>
     <div class="actions">
+      <button id="accountBtn" class="icon-btn" title="Account &amp; sync">&#9729;</button>
       <button id="themeBtn" class="icon-btn" title="Theme">&#9790;</button>
       <button id="addBtn" class="btn primary">+ Add</button>
     </div>
@@ -85,6 +86,27 @@
     </div>
   </div>
 
+  <!-- Account / sync sheet -->
+  <div id="acctSheet" class="sheet-overlay hidden">
+    <div class="sheet">
+      <h2>Account &amp; sync</h2>
+      <p class="hint">Sign in to sync your countdowns with your desktop and other devices. Paste your Supabase project URL and anon key (see SYNC.md).</p>
+      <label>Supabase URL<input id="syncUrlInput" type="text" placeholder="https://xxxx.supabase.co" /></label>
+      <label>Supabase anon key<input id="syncKeyInput" type="text" placeholder="eyJhbGci…" /></label>
+      <label>Email<input id="syncEmailInput" type="email" placeholder="you@example.com" /></label>
+      <label>Password<input id="syncPasswordInput" type="password" placeholder="••••••••" /></label>
+      <p class="hint" id="syncStatus">Not signed in.</p>
+      <div class="sheet-actions">
+        <button id="syncSignupBtn" class="btn ghost">Sign up</button>
+        <button id="syncLoginBtn" class="btn primary">Log in</button>
+        <button id="syncNowBtn" class="btn ghost hidden">Sync now</button>
+        <button id="syncLogoutBtn" class="btn ghost hidden">Log out</button>
+        <button id="acctClose" class="btn ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
