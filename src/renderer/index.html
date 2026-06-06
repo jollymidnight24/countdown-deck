@@ -14,8 +14,10 @@
 
   <!-- Full-screen focus view for a single countdown -->
   <div id="focusOverlay" class="hidden">
+    <div id="focusBg"></div>
     <button id="focusClose" class="btn ghost">✕ Close</button>
     <div class="focus-inner">
+      <div class="focus-icon" id="focusIcon"></div>
       <div class="focus-title" id="focusTitle"></div>
       <div class="focus-timer">
         <div class="unit"><div class="num" data-fu="d">0</div><div class="lbl">Days</div></div>
@@ -24,6 +26,7 @@
         <div class="unit"><div class="num" data-fu="s">00</div><div class="lbl">Sec</div></div>
       </div>
       <div class="focus-target" id="focusTarget"></div>
+      <div class="focus-progress"><div id="focusFill"></div></div>
     </div>
   </div>
 
@@ -110,6 +113,7 @@
   <footer class="statusbar">
     <div id="updateBadge" class="update-badge hidden"></div>
     <div class="statusbar-right">
+      <span class="credit">Designed by jollymidnight</span>
       <button id="checkUpdatesBtn" class="btn ghost tiny">Check for updates</button>
       <span id="versionTag" class="version-tag"></span>
     </div>

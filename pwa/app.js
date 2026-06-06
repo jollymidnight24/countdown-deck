@@ -137,7 +137,8 @@ function render() {
       ? `<div class="clock-face"><div class="clock-time" data-clock>--:--:--</div><div class="clock-zone">${esc((c.clockTz || 'Local').split('/').pop().replace('_', ' '))}</div></div>`
       : `<div class="timer"><div class="u"><div class="n" data-u="d">--</div><div class="l">Days</div></div><div class="u"><div class="n" data-u="h">--</div><div class="l">Hrs</div></div><div class="u"><div class="n" data-u="m">--</div><div class="l">Min</div></div><div class="u"><div class="n" data-u="s">--</div><div class="l">Sec</div></div></div><div class="progress"><div data-fill></div></div>`;
     const badge = c.kind === 'trading' ? '<span class="badge" data-badge></span>' : '';
-    card.innerHTML = `<div class="card-head"><div><div class="title"><span class="ic">${ic}</span><span class="t"></span></div><div class="meta"><span class="tg"></span> ${c.category ? `<span class="badge">${esc(c.category)}</span>` : ''} ${badge}</div></div><div class="menu"><button data-act="edit">Edit</button><button data-act="del">✕</button></div></div>${body}`;
+    card.innerHTML = `<div class="card-actions"><div class="menu"><button data-act="edit">Edit</button><button data-act="del">✕</button></div></div><div class="title-row"><span class="ic">${ic ? esc(ic) : ''}</span><span class="t"></span></div><div class="meta"><span class="tg"></span> ${c.category ? `<span class="badge">${esc(c.category)}</span>` : ''} ${badge}</div>${body}`;
+    if (!ic) { const e = card.querySelector('.ic'); if (e) e.remove(); }
     card.querySelector('.t').textContent = c.title;
     if (c.kind !== 'clock') card.querySelector('.tg').textContent = fmtTarget(c);
     grid.appendChild(card);

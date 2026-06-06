@@ -644,19 +644,18 @@ function createCard(c) {
       <div class="done-banner hidden">🎉 It's here!</div>
       <div class="card-progress"><div class="card-progress-fill"></div></div>`;
   const marketBadge = isTrading ? '<span class="market-badge hidden"></span>' : '';
+  // Layout: actions row on top → large icon + title row → details → body.
   card.innerHTML = `
-      <div class="card-head">
-        <div>
-          <div class="card-title">
-            <span class="drag-handle" title="Drag to reorder">⠿</span>
-            <span class="pin-dot">${c.pinned ? '📌' : ''}</span>
-            <span class="t-text"></span>
-          </div>
-          <div class="card-meta">
-            <span class="t-target"></span> ${tag} ${modePill} ${marketBadge}
-          </div>
-        </div>
+      <div class="card-actions">
+        <span class="drag-handle" title="Drag to reorder">⠿</span>
         <div class="card-menu">${menu}</div>
+      </div>
+      <div class="card-title-row">
+        <span class="card-icon"></span>
+        <span class="t-text"></span>
+      </div>
+      <div class="card-meta">
+        <span class="t-target"></span> ${tag} ${modePill} ${marketBadge}
       </div>
       ${body}`;
 
@@ -665,12 +664,13 @@ function createCard(c) {
   } else {
     card.querySelector('.t-target').textContent = formatTarget(c);
   }
-  // Icon sits inline immediately before the first word of the title.
+  // Icon is its own (enlarged) element to the left of the title.
   const ic = cardIcon(c);
-  const iconHtml = ic.url
-    ? `<span class="card-icon"><img class="icon-img" src="${ic.url}" alt=""></span>`
-    : (ic.emoji ? `<span class="card-icon">${ic.emoji}</span>` : '');
-  card.querySelector('.t-text').innerHTML = iconHtml + escapeHtml(c.title);
+  const iconEl = card.querySelector('.card-icon');
+  if (ic.url) iconEl.innerHTML = `<img class="icon-img" src="${ic.url}" alt="">`;
+  else if (ic.emoji) iconEl.textContent = ic.emoji;
+  else iconEl.remove();
+  card.querySelector('.t-text').textContent = c.title;
   applyCardAppearance(card, c);
   return card;
 }
@@ -1015,12 +1015,30 @@ function runPalette(i) { const c = paletteVisible[i]; if (c) { closePalette(); c
 // ===========================================================================
 // Focus mode (single countdown, full screen)
 // ===========================================================================
+function applyFocusBg(c) {
+  const bg = $('focusBg');
+  bg.className = ''; bg.style.backgroundImage = '';
+  bg.style.setProperty('--card-blur', (c.bgBlur || 0) + 'px');
+  const old = bg.querySelector('.focus-media'); if (old) old.remove();
+  const spec = c.bg || 'auto';
+  if (spec === 'none') return;
+  if (spec === 'auto') { bg.style.backgroundImage = `radial-gradient(120% 120% at 80% 0%, ${c.color}55 0%, transparent 60%)`; return; }
+  const [type, val] = spec.split(':');
+  if (type === 'preset') { const img = document.createElement('img'); img.className = 'focus-media'; img.src = `assets/backgrounds/${val}.jpg`; bg.appendChild(img); }
+  else if (type === 'anim') { bg.classList.add('animbg-' + val); }
+  else if (type === 'media') { const url = mediaUrl(val); if (url) { const isVid = /\.(mp4|webm)$/i.test(url); const el = document.createElement(isVid ? 'video' : 'img'); el.className = 'focus-media'; el.src = url; if (isVid) { el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true; } bg.appendChild(el); } }
+}
 function openFocus(id) {
   const c = countdowns.find((x) => x.id === id);
   if (!c) return;
   focusId = id;
   $('focusTitle').textContent = c.title;
   $('focusTitle').style.color = c.color || '';
+  $('focusOverlay').style.setProperty('--focus-accent', c.color || '');
+  const ic = cardIcon(c); const iconEl = $('focusIcon');
+  iconEl.innerHTML = ic.url ? `<img src="${ic.url}" alt="">` : (ic.emoji || '');
+  iconEl.style.display = (ic.url || ic.emoji) ? '' : 'none';
+  applyFocusBg(c);
   $('focusOverlay').classList.remove('hidden');
   updateFocus(Date.now());
 }
@@ -1028,6 +1046,7 @@ function closeFocus() { focusId = null; $('focusOverlay').classList.add('hidden'
 function updateFocus(now) {
   const c = countdowns.find((x) => x.id === focusId);
   if (!c) { closeFocus(); return; }
+  const fillWrap = $('focusFill').parentElement;
   if (c.kind === 'clock') {
     const z = getZoned(new Date(now), c.clockTz || Intl.DateTimeFormat().resolvedOptions().timeZone);
     $('focusOverlay').querySelector('[data-fu="d"]').textContent = '–';
@@ -1035,6 +1054,7 @@ function updateFocus(now) {
     $('focusOverlay').querySelector('[data-fu="m"]').textContent = pad(z.mi);
     $('focusOverlay').querySelector('[data-fu="s"]').textContent = pad(z.s);
     $('focusTarget').textContent = (c.clockTz || 'Local').replace('_', ' ');
+    fillWrap.style.display = 'none';
     return;
   }
   const b = breakdown(c, now);
@@ -1043,6 +1063,9 @@ function updateFocus(now) {
   $('focusOverlay').querySelector('[data-fu="m"]').textContent = pad(b.m);
   $('focusOverlay').querySelector('[data-fu="s"]').textContent = pad(b.s);
   $('focusTarget').textContent = formatTarget(c);
+  const fr = progressFraction(c, now);
+  if (fr == null) { fillWrap.style.display = 'none'; }
+  else { fillWrap.style.display = ''; $('focusFill').style.width = (fr * 100).toFixed(1) + '%'; }
 }
 
 // Which countdown the menu-bar + mini widget should currently show.

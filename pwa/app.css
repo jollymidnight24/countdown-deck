@@ -30,10 +30,12 @@ main { padding: 0 16px 30px; }
 @media (min-width: 620px) { .grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); } }
 .card { background: linear-gradient(160deg, var(--card), var(--card2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; position: relative; overflow: hidden; }
 .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--accent2, var(--accent)); }
-.card-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.title { font-weight: 650; font-size: 16px; overflow-wrap: break-word; word-break: normal; }
-.title .ic { margin-right: 5px; }
-.meta { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.card-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.title-row .ic { font-size: 32px; line-height: 1; flex: none; }
+.title-row .t { flex: 1 1 auto; min-width: 0; font-weight: 650; font-size: 17px; overflow-wrap: break-word; word-break: normal; }
+.meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.credit { text-align: right; color: var(--muted); font-style: italic; font-size: 12px; padding: 4px 16px 20px; }
 .badge { font-size: 11px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
 .badge[data-s="open"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .badge[data-s="pre"], .badge[data-s="after"] { color: #ffb05b; border-color: rgba(255,176,91,0.4); }

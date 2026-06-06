@@ -18,7 +18,7 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **End-of-countdown alerts**, chosen per countdown — any combination of a **sound** (six built-in alarm tones, or your own uploaded audio), a **banner notification**, and a **full-screen flash**. Each countdown can use one, several, or all at once.
 - **Milestone reminders** — optional heads-up banners at 1 day / 1 hour / 10 minutes before a countdown ends (per countdown; fire once per occurrence).
 - **Progress bars** on each card showing how far along you are toward the target.
-- **Focus mode** — click any card to view that single countdown full-screen with oversized digits.
+- **Focus mode** — click any card to view that single countdown full-screen with oversized digits, its background, large icon, and progress bar.
 - **Quiet hours** — a scheduled mute window (e.g. 10 PM–7 AM) on top of the manual Do Not Disturb toggle, plus a **configurable snooze length**.
 - **Light / dark theme** toggle.
 - **Menu-bar / system-tray view** with your choice of what to show: the **soonest** countdown, a **specific** one you pick, or **cycle** through them all at an interval you set. Plus an optional **always-on-top** window.
