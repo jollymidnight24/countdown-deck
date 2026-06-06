@@ -7,6 +7,12 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - Dashboard of multiple countdowns, each showing **days / hours / minutes / seconds**, updating every second.
 - **Add, edit, and remove** countdowns. Each has a title, target date & time, accent color, and category.
 - **Count-up mode** — track time *elapsed since* an event, not just time remaining.
+- **Natural-language entry** — type "Friday 9pm", "in 3 weeks", "next Christmas", or "tomorrow 6am" and it fills the date for you, with a live preview.
+- **Per-countdown entry timezone** — interpret a countdown's time in a chosen zone (e.g. always 9 PM ET) regardless of your display timezone.
+- **Live market status** — trading cards show **Open / Pre-market / After-hours / Closed** in real time.
+- **Calendar (.ics) import** — bring in events from Google Calendar, Outlook, or Apple Calendar (Settings → Data); future events become countdowns.
+- **World clocks** — add a card that shows the live current time in any timezone.
+- **Toolbar clock** — an optional always-visible clock in the toolbar, **analog or digital**, with its own timezone, size, and color (Settings → Menu-bar clock).
 - **Recurring** countdowns (weekly / monthly / yearly) that automatically roll forward to the next occurrence.
 - **Pin** important countdowns to the top, **drag to reorder**, **search**, **sort** (soonest / name / manual), and **filter by category**.
 - **End-of-countdown alerts**, chosen per countdown — any combination of a **sound** (six built-in alarm tones, or your own uploaded audio), a **banner notification**, and a **full-screen flash**. Each countdown can use one, several, or all at once.
@@ -76,6 +82,11 @@ When you pick a search result, the app calls TMDB again to get the **real next d
 ### A note on closing vs. quitting
 
 Because of the tray view, closing the window **hides** the app to the menu bar/tray rather than quitting it. Use the tray menu's **Quit** (or Cmd/Ctrl+Q) to fully exit.
+
+## Mobile (PWA) & code signing
+
+- **Mobile companion:** an installable Progressive Web App lives in [`pwa/`](pwa/README.md) — the same countdown engine (date, count-up, recurring, trading sessions, world clocks, natural-language entry) running in the browser with offline support and local storage. Host that folder over https and add it to your phone's home screen.
+- **Signed/notarized installers:** the build is wired for Apple notarization and Windows signing — see [`SIGNING.md`](SIGNING.md). It builds unsigned by default and turns on signing automatically once you add the credentials as GitHub secrets.
 
 ## Run it in development
 

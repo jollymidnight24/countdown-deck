@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Countdown Deck</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body data-theme="dark">
+  <header class="topbar">
+    <button class="brand" id="homeBtn"><span class="mono">CD</span> Countdown Deck</button>
+    <div class="actions">
+      <button id="themeBtn" class="icon-btn" title="Theme">&#9790;</button>
+      <button id="addBtn" class="btn primary">+ Add</button>
+    </div>
+  </header>
+
+  <input id="search" class="search" type="search" placeholder="Search…" />
+
+  <main>
+    <div id="empty" class="empty hidden">
+      <p>No countdowns yet.</p>
+      <button id="emptyAdd" class="btn primary">Add your first countdown</button>
+    </div>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <!-- Add / edit sheet -->
+  <div id="sheet" class="sheet-overlay hidden">
+    <div class="sheet">
+      <h2 id="sheetTitle">Add countdown</h2>
+      <label>What are you tracking?
+        <select id="kind">
+          <option value="date">A date / event</option>
+          <option value="trading">A trading session</option>
+          <option value="clock">A world clock</option>
+        </select>
+      </label>
+      <label>Title<input id="title" type="text" maxlength="80" placeholder="SpaceX IPO" /></label>
+
+      <div id="dateFields">
+        <label>Type it in plain English (optional)
+          <input id="nl" type="text" placeholder="Friday 9pm · in 3 weeks · next Christmas" />
+        </label>
+        <p class="hint" id="nlPreview"></p>
+        <label>Date &amp; time<input id="date" type="datetime-local" /></label>
+        <div class="row">
+          <label>Mode
+            <select id="mode"><option value="down">Count down</option><option value="up">Count up</option></select>
+          </label>
+          <label>Repeats
+            <select id="recurrence"><option value="none">Never</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select>
+          </label>
+        </div>
+      </div>
+
+      <div id="tradingFields" class="row hidden">
+        <label>Exchange<select id="exchange"></select></label>
+        <label>Session<select id="session"></select></label>
+      </div>
+
+      <div id="clockFields" class="hidden">
+        <label>Timezone<select id="clockTz"></select></label>
+      </div>
+
+      <div class="row">
+        <label>Category<input id="category" type="text" maxlength="40" placeholder="e.g. Space" /></label>
+        <label>Color<input id="color" type="color" value="#5b8cff" /></label>
+      </div>
+      <label>Icon<select id="icon"></select></label>
+
+      <div class="sheet-actions">
+        <button id="cancel" class="btn ghost">Cancel</button>
+        <button id="save" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

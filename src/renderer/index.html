@@ -54,6 +54,8 @@
       <span class="brand-sub">Countdown<br>Deck</span>
     </button>
 
+    <div id="menuClock" class="hidden" title="Menu-bar clock"></div>
+
     <div class="toolbar">
       <input id="searchInput" type="search" class="search" placeholder="Search…" />
       <select id="sortSelect" class="select" title="Sort">
@@ -84,14 +86,6 @@
   </header>
 
   <div id="content">
-  <div class="subbar">
-    <div id="updateBadge" class="update-badge hidden"></div>
-    <div class="subbar-right">
-      <button id="checkUpdatesBtn" class="btn ghost tiny">Check for updates</button>
-      <span id="versionTag" class="version-tag"></span>
-    </div>
-  </div>
-
   <div id="tabsBar" class="tabs hidden"></div>
 
   <main>
@@ -112,6 +106,14 @@
     </section>
     <div id="grid" class="grid"></div>
   </main>
+
+  <footer class="statusbar">
+    <div id="updateBadge" class="update-badge hidden"></div>
+    <div class="statusbar-right">
+      <button id="checkUpdatesBtn" class="btn ghost tiny">Check for updates</button>
+      <span id="versionTag" class="version-tag"></span>
+    </div>
+  </footer>
   </div><!-- /#content -->
 
   <!-- Add / Edit modal -->
@@ -123,6 +125,7 @@
         <select id="kindInput">
           <option value="date">A specific date / event</option>
           <option value="trading">A stock-exchange trading session</option>
+          <option value="clock">A world clock</option>
         </select>
       </label>
 
@@ -142,23 +145,39 @@
         </label>
 
         <!-- Date-kind fields -->
-        <div id="dateFields" class="form-grid">
-          <label>Target date &amp; time
-            <input id="dateInput" type="datetime-local" />
+        <div id="dateFields">
+          <label>Type it in plain English (optional)
+            <input id="nlInput" type="text" placeholder="e.g. Friday 9pm · in 3 weeks · next Christmas" />
           </label>
-          <label>Mode
-            <select id="modeInput">
-              <option value="down">Count down to</option>
-              <option value="up">Count up since</option>
-            </select>
-          </label>
-          <label>Repeats
-            <select id="recurrenceInput">
-              <option value="none">Never</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
+          <p class="hint" id="nlPreview"></p>
+          <div class="form-grid">
+            <label>Target date &amp; time
+              <input id="dateInput" type="datetime-local" />
+            </label>
+            <label>Interpret time in
+              <select id="entryTzInput"></select>
+            </label>
+            <label>Mode
+              <select id="modeInput">
+                <option value="down">Count down to</option>
+                <option value="up">Count up since</option>
+              </select>
+            </label>
+            <label>Repeats
+              <select id="recurrenceInput">
+                <option value="none">Never</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <!-- World-clock fields -->
+        <div id="clockFields" class="form-grid hidden">
+          <label>Timezone
+            <select id="clockTzInput"></select>
           </label>
         </div>
 
@@ -182,7 +201,7 @@
           </label>
         </div>
 
-        <fieldset class="appearance">
+        <fieldset class="appearance" id="alertsFieldset">
           <legend>Alerts when it ends</legend>
           <div class="form-grid">
             <label>Sound
@@ -331,6 +350,36 @@
       </div>
 
       </details>
+      <details class="settings-section"><summary>Menu-bar clock</summary>
+      <label class="switch-row"><span>Show a clock in the toolbar</span><input id="menuClockEnabledInput" type="checkbox" /></label>
+      <div class="form-grid">
+        <label>Clock type
+          <select id="menuClockTypeInput">
+            <option value="digital">Digital</option>
+            <option value="analog">Analog</option>
+          </select>
+        </label>
+        <label>Timezone
+          <select id="menuClockTzInput"></select>
+        </label>
+        <label>Size
+          <select id="menuClockSizeInput">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
+        <label>Color
+          <select id="menuClockColorModeInput">
+            <option value="theme">Theme color</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label id="menuClockColorWrap" class="hidden">Custom clock color
+          <input id="menuClockColorInput" type="color" value="#5b8cff" />
+        </label>
+      </div>
+      </details>
       <details class="settings-section" open><summary>Date &amp; time</summary>
       <div class="form-grid">
         <label>Date / time format
@@ -408,7 +457,10 @@
         <button type="button" id="exportBtn" class="btn ghost">Export countdowns…</button>
         <button type="button" id="importBtn" class="btn ghost">Import countdowns…</button>
         <input id="importFile" type="file" accept="application/json" class="hidden" />
+        <button type="button" id="importIcsBtn" class="btn ghost">Import calendar (.ics)…</button>
+        <input id="importIcsFile" type="file" accept=".ics,text/calendar" class="hidden" />
       </div>
+      <p class="hint">Import an .ics file exported from Google Calendar, Outlook, or Apple Calendar — future events become countdowns.</p>
       </details>
 
       <div class="modal-actions">

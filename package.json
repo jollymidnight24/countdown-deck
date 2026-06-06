@@ -1,7 +1,7 @@
 {
   "name": "countdown-deck",
   "productName": "Countdown Deck",
-  "version": "2.3.0",
+  "version": "2.6.0",
   "description": "A cross-platform desktop dashboard of live countdown timers.",
   "author": {
     "name": "Justin Jaudines",
@@ -25,6 +25,7 @@
       "src/**/*",
       "!**/*.map"
     ],
+    "afterSign": "scripts/notarize.js",
     "publish": [
       {
         "provider": "github",
@@ -35,6 +36,10 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         { "target": "dmg", "arch": ["x64", "arm64"] },
         { "target": "zip", "arch": ["x64", "arm64"] }
@@ -55,6 +60,7 @@
     }
   },
   "devDependencies": {
+    "@electron/notarize": "^2.3.2",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },

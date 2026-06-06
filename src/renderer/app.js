@@ -12,7 +12,8 @@ let settings = {
   quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5,
   accent: '', viewMode: 'cards', groupByCategory: false, collapsedGroups: [], onboarded: false,
   backupFolder: '', syncOnLaunch: false, shortcuts: {},
-  progressStyle: 'rounded', progressHeight: 8, progressColor: '', progressPosition: 'inline', barPosition: 'top'
+  progressStyle: 'rounded', progressHeight: 8, progressColor: '', progressPosition: 'inline', barPosition: 'top',
+  menuClockEnabled: false, menuClockType: 'digital', menuClockTz: '', menuClockSize: 'medium', menuClockColor: ''
 };
 let lastTraySig = '';
 let focusId = null;
@@ -203,6 +204,117 @@ function prevSessionMs(ex, sessionKey, fromMs) {
   return NaN;
 }
 
+// Live market status for a trading countdown.
+function marketStatus(c, nowMs) {
+  const ex = exchangeById(c.exchange);
+  if (!ex) return null;
+  const z = getZoned(new Date(nowMs), ex.tz);
+  if (!isTradingDay(z.y, z.mo, z.d, ex)) return { state: 'closed', label: 'Closed' };
+  const inst = (key) => { const hhmm = sessionTimeFor(ex, key, z.y, z.mo, z.d); if (!hhmm) return null; const [h, m] = hhmm.split(':').map(Number); return wallToUtc(z.y, z.mo, z.d, h, m, ex.tz); };
+  const open = inst('open'), close = inst('close'), pre = inst('pre'), post = inst('post');
+  if (pre && nowMs < pre) return { state: 'closed', label: 'Closed' };
+  if (pre && nowMs < open) return { state: 'pre', label: 'Pre-market' };
+  if (!pre && nowMs < open) return { state: 'closed', label: 'Closed' };
+  if (nowMs < close) return { state: 'open', label: 'Open' };
+  if (post && nowMs < post) return { state: 'after', label: 'After-hours' };
+  return { state: 'closed', label: 'Closed' };
+}
+
+// ---------------------------------------------------------------------------
+// Natural-language date parsing ("Friday 9pm", "in 3 weeks", "next Christmas")
+// ---------------------------------------------------------------------------
+const NL_HOLIDAYS = { christmas: [11, 25], 'new year': [0, 1], "new year's": [0, 1], 'new years': [0, 1], halloween: [9, 31], valentine: [1, 14] };
+const NL_MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function parseNaturalDate(input, nowMs) {
+  if (!input || !input.trim()) return null;
+  let s = ' ' + input.trim().toLowerCase() + ' ';
+  const now = new Date(nowMs);
+  let hour = null, min = 0, m;
+  if (/\bnoon\b/.test(s)) { hour = 12; s = s.replace(/\bnoon\b/, ' '); }
+  else if (/\bmidnight\b/.test(s)) { hour = 0; s = s.replace(/\bmidnight\b/, ' '); }
+  if (hour === null && (m = s.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/))) { hour = +m[1] % 12; if (m[3] === 'pm') hour += 12; min = m[2] ? +m[2] : 0; s = s.replace(m[0], ' '); }
+  else if (hour === null && (m = s.match(/\b(\d{1,2}):(\d{2})\b/))) { hour = +m[1]; min = +m[2]; s = s.replace(m[0], ' '); }
+  else if (hour === null && (m = s.match(/\bat\s+(\d{1,2})\b/))) { hour = +m[1]; s = s.replace(m[0], ' '); }
+  const tonight = /\btonight\b/.test(s); if (tonight && hour === null) hour = 20;
+
+  const startOfDay = (d) => { d.setHours(0, 0, 0, 0); return d; };
+  const setHM = (d) => { d.setHours(hour === null ? 9 : hour, min, 0, 0); return d; };
+
+  if ((m = s.match(/\bin\s+(\d+)\s*(min(?:ute)?s?|hours?|hrs?|days?|weeks?|months?|years?)\b/))) {
+    const n = +m[1], u = m[2], d = new Date(now);
+    if (/^min/.test(u)) d.setMinutes(d.getMinutes() + n);
+    else if (/^h/.test(u)) d.setHours(d.getHours() + n);
+    else if (/^day/.test(u)) { d.setDate(d.getDate() + n); if (hour !== null) setHM(d); }
+    else if (/^week/.test(u)) { d.setDate(d.getDate() + 7 * n); if (hour !== null) setHM(d); }
+    else if (/^month/.test(u)) { d.setMonth(d.getMonth() + n); if (hour !== null) setHM(d); }
+    else { d.setFullYear(d.getFullYear() + n); if (hour !== null) setHM(d); }
+    return d;
+  }
+  let base = null;
+  if (/\btomorrow\b/.test(s)) { base = startOfDay(new Date(now)); base.setDate(base.getDate() + 1); }
+  else if (/\btoday\b/.test(s) || tonight) { base = startOfDay(new Date(now)); }
+  else if ((m = s.match(/\bnext\s+(week|month|year)\b/))) {
+    base = new Date(now);
+    if (m[1] === 'week') base.setDate(base.getDate() + 7); else if (m[1] === 'month') base.setMonth(base.getMonth() + 1); else base.setFullYear(base.getFullYear() + 1);
+    startOfDay(base);
+  }
+  if (!base) for (const k in NL_HOLIDAYS) {
+    if (s.includes(k)) { const [mo, day] = NL_HOLIDAYS[k]; let d = new Date(now.getFullYear(), mo, day); if (d.getTime() < nowMs) d = new Date(now.getFullYear() + 1, mo, day); base = startOfDay(d); break; }
+  }
+  if (!base && (m = s.match(/\b(next\s+|this\s+)?(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/))) {
+    const wd = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }[m[2]];
+    const d = startOfDay(new Date(now));
+    let add = (wd - d.getDay() + 7) % 7; if (add === 0) add = 7;
+    d.setDate(d.getDate() + add); base = d;
+  }
+  if (!base && (m = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,?\s*(\d{4}))?\b/))) {
+    const mo = NL_MON.indexOf(m[1]), day = +m[2]; let y = m[3] ? +m[3] : now.getFullYear();
+    let d = new Date(y, mo, day); if (!m[3] && d.getTime() < nowMs) d = new Date(y + 1, mo, day); base = startOfDay(d);
+  }
+  if (!base && (m = s.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/))) {
+    const day = +m[1], mo = NL_MON.indexOf(m[2]); let d = new Date(now.getFullYear(), mo, day); if (d.getTime() < nowMs) d = new Date(now.getFullYear() + 1, mo, day); base = startOfDay(d);
+  }
+  if (!base) {
+    if (hour !== null) { const cand = setHM(startOfDay(new Date(now))); if (cand.getTime() <= nowMs) cand.setDate(cand.getDate() + 1); return cand; }
+    return null;
+  }
+  return setHM(base);
+}
+
+// Interpret a datetime-local value in a given timezone (or local if blank).
+function targetFromInput(value, tz) {
+  if (!tz) return new Date(value).toISOString();
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return new Date(value).toISOString();
+  return new Date(wallToUtc(+m[1], +m[2], +m[3], +m[4], +m[5], tz)).toISOString();
+}
+
+// ---------------------------------------------------------------------------
+// .ics calendar parsing
+// ---------------------------------------------------------------------------
+function parseICS(text) {
+  const lines = String(text).replace(/\r?\n[ \t]/g, '').split(/\r?\n/);
+  const events = []; let cur = null;
+  for (const line of lines) {
+    if (line.startsWith('BEGIN:VEVENT')) cur = {};
+    else if (line.startsWith('END:VEVENT')) { if (cur && cur.target) events.push(cur); cur = null; }
+    else if (cur) {
+      const ci = line.indexOf(':'); if (ci < 0) continue;
+      const left = line.slice(0, ci), val = line.slice(ci + 1);
+      const name = left.split(';')[0].toUpperCase();
+      if (name === 'SUMMARY') cur.title = val.replace(/\\,/g, ',').replace(/\\n/gi, ' ').replace(/\\;/g, ';').trim();
+      else if (name === 'DTSTART') {
+        const mt = left.match(/TZID=([^;:]+)/i); const tzid = mt ? mt[1] : null;
+        let inst = null;
+        if (/^\d{8}$/.test(val)) { inst = new Date(+val.slice(0, 4), +val.slice(4, 6) - 1, +val.slice(6, 8), 0, 0, 0).getTime(); }
+        else { const m = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/); if (m) { const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], se = +(m[6] || 0); inst = m[7] ? Date.UTC(y, mo - 1, d, h, mi, se) : tzid ? wallToUtc(y, mo, d, h, mi, tzid) : new Date(y, mo - 1, d, h, mi, se).getTime(); } }
+        if (inst != null) cur.target = new Date(inst).toISOString();
+      }
+    }
+  }
+  return events;
+}
+
 // ===========================================================================
 // DOM refs
 // ===========================================================================
@@ -228,6 +340,9 @@ const categoryList = $('categoryList');
 const kindInput = $('kindInput');
 const exchangeInput = $('exchangeInput');
 const sessionInput = $('sessionInput');
+const nlInput = $('nlInput');
+const entryTzInput = $('entryTzInput');
+const clockTzInput = $('clockTzInput');
 const bgInput = $('bgInput');
 const fontInput = $('fontInput');
 const fontScaleInput = $('fontScaleInput');
@@ -269,6 +384,12 @@ const progressColorModeInput = $('progressColorModeInput');
 const progressColorInput = $('progressColorInput');
 const progressPositionInput = $('progressPositionInput');
 const barPositionInput = $('barPositionInput');
+const menuClockEnabledInput = $('menuClockEnabledInput');
+const menuClockTypeInput = $('menuClockTypeInput');
+const menuClockTzInput = $('menuClockTzInput');
+const menuClockSizeInput = $('menuClockSizeInput');
+const menuClockColorModeInput = $('menuClockColorModeInput');
+const menuClockColorInput = $('menuClockColorInput');
 
 // ===========================================================================
 // Helpers
@@ -279,9 +400,11 @@ const pad = (n) => String(n).padStart(2, '0');
 function normalize(c) {
   return {
     id: c.id || uid(),
-    kind: c.kind === 'trading' ? 'trading' : 'date',
+    kind: ['trading', 'clock'].includes(c.kind) ? c.kind : 'date',
     exchange: c.exchange || '',
     session: c.session || 'open',
+    entryTz: c.entryTz || '',
+    clockTz: c.clockTz || '',
     title: String(c.title || 'Untitled'),
     target: c.target,
     color: c.color || '#5b8cff',
@@ -500,6 +623,27 @@ function createCard(c) {
 
   const tag = c.category ? `<span class="tag">${escapeHtml(c.category)}</span>` : '';
   const modePill = c.mode === 'up' ? '<span class="mode-pill">counting up</span>' : '';
+  const isClock = c.kind === 'clock';
+  const isTrading = c.kind === 'trading';
+  const menu = isClock
+    ? `<button class="btn ghost tiny" data-action="pin">${c.pinned ? 'Unpin' : 'Pin'}</button>
+       <button class="btn ghost tiny" data-action="edit">Edit</button>
+       <button class="btn ghost tiny" data-action="remove">✕</button>`
+    : `<button class="btn ghost tiny" data-action="test" title="Test this countdown's alerts">🔔</button>
+       <button class="btn ghost tiny" data-action="pin">${c.pinned ? 'Unpin' : 'Pin'}</button>
+       <button class="btn ghost tiny" data-action="edit">Edit</button>
+       <button class="btn ghost tiny" data-action="remove">✕</button>`;
+  const body = isClock
+    ? `<div class="clock-face"><div class="clock-time" data-clock>--:--:--</div><div class="clock-zone"></div></div>`
+    : `<div class="timer">
+        <div class="unit"><div class="num" data-u="d">--</div><div class="lbl">Days</div></div>
+        <div class="unit"><div class="num" data-u="h">--</div><div class="lbl">Hours</div></div>
+        <div class="unit"><div class="num" data-u="m">--</div><div class="lbl">Min</div></div>
+        <div class="unit"><div class="num" data-u="s">--</div><div class="lbl">Sec</div></div>
+      </div>
+      <div class="done-banner hidden">🎉 It's here!</div>
+      <div class="card-progress"><div class="card-progress-fill"></div></div>`;
+  const marketBadge = isTrading ? '<span class="market-badge hidden"></span>' : '';
   card.innerHTML = `
       <div class="card-head">
         <div>
@@ -509,26 +653,18 @@ function createCard(c) {
             <span class="t-text"></span>
           </div>
           <div class="card-meta">
-            <span class="t-target"></span> ${tag} ${modePill}
+            <span class="t-target"></span> ${tag} ${modePill} ${marketBadge}
           </div>
         </div>
-        <div class="card-menu">
-          <button class="btn ghost tiny" data-action="test" title="Test this countdown's alerts">🔔</button>
-          <button class="btn ghost tiny" data-action="pin">${c.pinned ? 'Unpin' : 'Pin'}</button>
-          <button class="btn ghost tiny" data-action="edit">Edit</button>
-          <button class="btn ghost tiny" data-action="remove">✕</button>
-        </div>
+        <div class="card-menu">${menu}</div>
       </div>
-      <div class="timer">
-        <div class="unit"><div class="num" data-u="d">--</div><div class="lbl">Days</div></div>
-        <div class="unit"><div class="num" data-u="h">--</div><div class="lbl">Hours</div></div>
-        <div class="unit"><div class="num" data-u="m">--</div><div class="lbl">Min</div></div>
-        <div class="unit"><div class="num" data-u="s">--</div><div class="lbl">Sec</div></div>
-      </div>
-      <div class="done-banner hidden">🎉 It's here!</div>
-      <div class="card-progress"><div class="card-progress-fill"></div></div>`;
+      ${body}`;
 
-  card.querySelector('.t-target').textContent = formatTarget(c);
+  if (isClock) {
+    card.querySelector('.clock-zone').textContent = (c.clockTz || 'Local').replace('_', ' ');
+  } else {
+    card.querySelector('.t-target').textContent = formatTarget(c);
+  }
   // Icon sits inline immediately before the first word of the title.
   const ic = cardIcon(c);
   const iconHtml = ic.url
@@ -650,6 +786,16 @@ function tick() {
   let changed = false;
 
   for (const c of countdowns) {
+    // World clocks just display the live time in their zone.
+    if (c.kind === 'clock') {
+      const card = grid.querySelector(`.card[data-id="${c.id}"]`);
+      if (card) {
+        const z = getZoned(new Date(now), c.clockTz || Intl.DateTimeFormat().resolvedOptions().timeZone);
+        const el = card.querySelector('[data-clock]');
+        if (el) el.textContent = `${pad(z.h)}:${pad(z.mi)}:${pad(z.s)}`;
+      }
+      continue;
+    }
     const b = breakdown(c, now);
 
     // Notifications + roll-over (recurring and trading re-arm automatically)
@@ -712,9 +858,17 @@ function tick() {
     const bar = card.querySelector('.card-progress');
     if (frac == null) { bar.style.display = 'none'; }
     else { bar.style.display = ''; card.querySelector('.card-progress-fill').style.width = (frac * 100).toFixed(1) + '%'; }
+
+    // Live market status badge (trading countdowns)
+    const badge = card.querySelector('.market-badge');
+    if (badge && c.kind === 'trading') {
+      const st = marketStatus(c, now);
+      if (st) { badge.textContent = st.label; badge.dataset.state = st.state; badge.classList.remove('hidden'); }
+    }
   }
 
   if (focusId) updateFocus(now);
+  updateMenuClock(now);
   if (changed) persist();
   const aux = auxList(now);
   const curId = pickCurrentId(now, aux);
@@ -874,6 +1028,15 @@ function closeFocus() { focusId = null; $('focusOverlay').classList.add('hidden'
 function updateFocus(now) {
   const c = countdowns.find((x) => x.id === focusId);
   if (!c) { closeFocus(); return; }
+  if (c.kind === 'clock') {
+    const z = getZoned(new Date(now), c.clockTz || Intl.DateTimeFormat().resolvedOptions().timeZone);
+    $('focusOverlay').querySelector('[data-fu="d"]').textContent = '–';
+    $('focusOverlay').querySelector('[data-fu="h"]').textContent = pad(z.h);
+    $('focusOverlay').querySelector('[data-fu="m"]').textContent = pad(z.mi);
+    $('focusOverlay').querySelector('[data-fu="s"]').textContent = pad(z.s);
+    $('focusTarget').textContent = (c.clockTz || 'Local').replace('_', ' ');
+    return;
+  }
   const b = breakdown(c, now);
   $('focusOverlay').querySelector('[data-fu="d"]').textContent = String(b.d);
   $('focusOverlay').querySelector('[data-fu="h"]').textContent = pad(b.h);
@@ -907,6 +1070,43 @@ function updateTray(now, items, curId) {
 }
 
 function applyBarPosition() { document.body.dataset.bar = settings.barPosition || 'top'; }
+
+// Toolbar clock --------------------------------------------------------------
+function applyMenuClock() {
+  const el = $('menuClock');
+  el.classList.toggle('hidden', !settings.menuClockEnabled);
+  el.dataset.size = settings.menuClockSize || 'medium';
+  if (settings.menuClockColor) el.style.setProperty('--clock-color', settings.menuClockColor);
+  else el.style.removeProperty('--clock-color');
+  if (!settings.menuClockEnabled) { el.innerHTML = ''; return; }
+  const zoneLabel = menuClockZoneLabel();
+  if (settings.menuClockType === 'analog') {
+    let ticks = '';
+    for (let i = 0; i < 12; i++) { const a = (i * 30) * Math.PI / 180; const x1 = 50 + 40 * Math.sin(a), y1 = 50 - 40 * Math.cos(a), x2 = 50 + 45 * Math.sin(a), y2 = 50 - 45 * Math.cos(a); ticks += `<line class="mc-tick" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`; }
+    el.innerHTML = `<svg class="mclock-analog" viewBox="0 0 100 100"><circle class="mc-face" cx="50" cy="50" r="47"/>${ticks}<line class="mc-hour" x1="50" y1="50" x2="50" y2="28"/><line class="mc-min" x1="50" y1="50" x2="50" y2="20"/><line class="mc-sec" x1="50" y1="50" x2="50" y2="17"/><circle class="mc-pin" cx="50" cy="50" r="3.5"/></svg><span class="mclock-zone">${escapeHtml(zoneLabel)}</span>`;
+  } else {
+    el.innerHTML = `<span class="mclock-digital" data-mctime>--:--:--</span><span class="mclock-zone">${escapeHtml(zoneLabel)}</span>`;
+  }
+  updateMenuClock(Date.now());
+}
+// "Local · New York" when using local time, else the chosen zone (e.g. "Tokyo").
+function menuClockZoneLabel() {
+  const tz = settings.menuClockTz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const city = String(tz).split('/').pop().replace(/_/g, ' ');
+  return settings.menuClockTz ? city : `Local · ${city}`;
+}
+function updateMenuClock(now) {
+  if (!settings.menuClockEnabled) return;
+  const el = $('menuClock');
+  const z = getZoned(new Date(now), settings.menuClockTz || Intl.DateTimeFormat().resolvedOptions().timeZone);
+  if (settings.menuClockType === 'analog') {
+    const h = z.h % 12, m = z.mi, s = z.s;
+    const set = (sel, deg) => { const e = el.querySelector(sel); if (e) e.setAttribute('transform', `rotate(${deg} 50 50)`); };
+    set('.mc-hour', h * 30 + m * 0.5); set('.mc-min', m * 6 + s * 0.1); set('.mc-sec', s * 6);
+  } else {
+    const t = el.querySelector('[data-mctime]'); if (t) t.textContent = `${pad(z.h)}:${pad(z.mi)}:${pad(z.s)}`;
+  }
+}
 
 function goHome() {
   searchInput.value = '';
@@ -1204,10 +1404,12 @@ async function handleMediaPick(fileInput, sel, wrap) {
 // Add / edit
 // ===========================================================================
 function syncKindFields() {
-  const trading = kindInput.value === 'trading';
-  $('tradingFields').classList.toggle('hidden', !trading);
-  $('dateFields').classList.toggle('hidden', trading);
-  $('tmdbBox').classList.toggle('hidden', trading);
+  const k = kindInput.value;
+  $('tradingFields').classList.toggle('hidden', k !== 'trading');
+  $('clockFields').classList.toggle('hidden', k !== 'clock');
+  $('dateFields').classList.toggle('hidden', k !== 'date');
+  $('tmdbBox').classList.toggle('hidden', k !== 'date');
+  $('alertsFieldset').classList.toggle('hidden', k === 'clock');   // clocks don't alert
 }
 
 let lastSuggestedTitle = '';
@@ -1231,6 +1433,10 @@ function openModal(editId = null) {
   buildSoundSelect(alertSoundInput);
   buildIconSelect(iconInput);
   buildExchangeSelect();
+  buildTimeZoneSelect(entryTzInput);
+  buildTimeZoneSelect(clockTzInput);
+  nlInput.value = '';
+  $('nlPreview').textContent = '';
   $('bgUploadWrap').classList.add('hidden');
   $('alertUploadWrap').classList.add('hidden');
   $('iconUploadWrap').classList.add('hidden');
@@ -1240,7 +1446,10 @@ function openModal(editId = null) {
     modalTitle.textContent = 'Edit countdown';
     kindInput.value = c.kind;
     titleInput.value = c.title;
-    dateInput.value = c.target ? toLocalInputValue(c.target) : '';
+    if (c.entryTz) { const z = getZoned(new Date(c.target), c.entryTz); dateInput.value = `${z.y}-${pad(z.mo)}-${pad(z.d)}T${pad(z.h)}:${pad(z.mi)}`; }
+    else dateInput.value = c.target ? toLocalInputValue(c.target) : '';
+    entryTzInput.value = c.entryTz || '';
+    clockTzInput.value = c.clockTz || '';
     modeInput.value = c.mode;
     recurrenceInput.value = c.recurrence;
     categoryInput.value = c.category;
@@ -1283,6 +1492,8 @@ function openModal(editId = null) {
     modeInput.value = 'down';
     recurrenceInput.value = 'none';
     dateInput.value = toLocalInputValue(new Date(Date.now() + 7 * 86400000).toISOString());
+    entryTzInput.value = '';
+    clockTzInput.value = '';
     buildSessionSelect(EXCHANGES[0].id);
     bgInput.value = 'auto';
     fontInput.value = '';
@@ -1307,9 +1518,9 @@ function bgValueOrDefault(v) { return v === 'upload' ? 'auto' : v; }
 
 function saveFromForm(evt) {
   evt.preventDefault();
-  const trading = kindInput.value === 'trading';
+  const kind = kindInput.value;
   if (!titleInput.value.trim()) return;
-  if (!trading && !dateInput.value) return;
+  if (kind === 'date' && !dateInput.value) return;
 
   const appearance = {
     bg: bgValueOrDefault(bgInput.value),
@@ -1326,23 +1537,31 @@ function saveFromForm(evt) {
   };
 
   let data;
-  if (trading) {
+  if (kind === 'trading') {
     data = Object.assign({
       kind: 'trading',
       exchange: exchangeInput.value,
       session: sessionInput.value,
       title: titleInput.value.trim(),
-      target: '',
-      mode: 'down',
-      recurrence: 'none',
+      target: '', mode: 'down', recurrence: 'none',
       category: categoryInput.value.trim() || 'Markets',
+      color: colorInput.value
+    }, appearance);
+  } else if (kind === 'clock') {
+    data = Object.assign({
+      kind: 'clock',
+      clockTz: clockTzInput.value,
+      title: titleInput.value.trim(),
+      target: '', mode: 'down', recurrence: 'none',
+      category: categoryInput.value.trim() || 'Clocks',
       color: colorInput.value
     }, appearance);
   } else {
     data = Object.assign({
       kind: 'date',
       title: titleInput.value.trim(),
-      target: new Date(dateInput.value).toISOString(),
+      target: targetFromInput(dateInput.value, entryTzInput.value),
+      entryTz: entryTzInput.value,
       mode: modeInput.value,
       recurrence: recurrenceInput.value,
       category: categoryInput.value.trim(),
@@ -1489,6 +1708,16 @@ function openSettings() {
   dashboardBgInput.value = settings.dashboardBg || 'preset:nebula';
   $('dashUploadWrap').classList.add('hidden');
 
+  // Menu-bar clock
+  menuClockEnabledInput.checked = !!settings.menuClockEnabled;
+  menuClockTypeInput.value = settings.menuClockType || 'digital';
+  buildTimeZoneSelect(menuClockTzInput);
+  menuClockTzInput.value = settings.menuClockTz || '';
+  menuClockSizeInput.value = settings.menuClockSize || 'medium';
+  menuClockColorModeInput.value = settings.menuClockColor ? 'custom' : 'theme';
+  menuClockColorInput.value = settings.menuClockColor || currentAccentHex();
+  $('menuClockColorWrap').classList.toggle('hidden', !settings.menuClockColor);
+
   // Date & time
   buildTimeZoneSelect(timeZoneInput);
   dateFormatInput.value = settings.dateFormat || 'system';
@@ -1574,6 +1803,24 @@ function importCountdowns(file) {
     } catch (_) {
       alert('Could not import: the file is not a valid Countdown Deck export.');
     }
+  };
+  reader.readAsText(file);
+}
+
+function importIcs(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let events;
+    try { events = parseICS(reader.result); } catch (_) { events = []; }
+    events = events.filter((ev) => ev.target && new Date(ev.target).getTime() > Date.now());
+    if (!events.length) { alert('No upcoming events found in that calendar file.'); return; }
+    const added = events.slice(0, 200).map((ev) => normalize({
+      kind: 'date', title: ev.title || 'Event', target: ev.target,
+      mode: 'down', recurrence: 'none', category: 'Calendar', color: '#5b8cff'
+    }));
+    countdowns = countdowns.concat(added);
+    persist(); render(); closeSettings();
+    alert(`Imported ${added.length} event(s) from the calendar.`);
   };
   reader.readAsText(file);
 }
@@ -1680,6 +1927,7 @@ async function init() {
   applyUiScale();
   applyProgress();
   applyBarPosition();
+  applyMenuClock();
   applyDashboardBg();
   sortSelect.value = settings.sort;
   viewSelect.value = settings.viewMode || 'cards';
@@ -1737,6 +1985,19 @@ async function init() {
   });
   progressPositionInput.addEventListener('change', () => { settings.progressPosition = progressPositionInput.value; persistSettings(); applyProgress(); });
   barPositionInput.addEventListener('change', () => { settings.barPosition = barPositionInput.value; persistSettings(); applyBarPosition(); });
+  // menu-bar clock (live)
+  const saveClock = () => { persistSettings(); applyMenuClock(); };
+  menuClockEnabledInput.addEventListener('change', () => { settings.menuClockEnabled = menuClockEnabledInput.checked; saveClock(); });
+  menuClockTypeInput.addEventListener('change', () => { settings.menuClockType = menuClockTypeInput.value; saveClock(); });
+  menuClockTzInput.addEventListener('change', () => { settings.menuClockTz = menuClockTzInput.value; saveClock(); });
+  menuClockSizeInput.addEventListener('change', () => { settings.menuClockSize = menuClockSizeInput.value; saveClock(); });
+  menuClockColorModeInput.addEventListener('change', () => {
+    const custom = menuClockColorModeInput.value === 'custom';
+    $('menuClockColorWrap').classList.toggle('hidden', !custom);
+    settings.menuClockColor = custom ? menuClockColorInput.value : '';
+    saveClock();
+  });
+  menuClockColorInput.addEventListener('input', () => { if (menuClockColorModeInput.value === 'custom') { settings.menuClockColor = menuClockColorInput.value; saveClock(); } });
   $('welcomeClose').addEventListener('click', () => { $('welcomeOverlay').classList.add('hidden'); settings.onboarded = true; persistSettings(); });
   $('miniBtn').addEventListener('click', () => window.api.toggleMini());
 
@@ -1784,6 +2045,11 @@ async function init() {
   kindInput.addEventListener('change', () => { syncKindFields(); suggestTradingTitle(); });
   exchangeInput.addEventListener('change', () => { buildSessionSelect(exchangeInput.value); suggestTradingTitle(true); });
   sessionInput.addEventListener('change', () => suggestTradingTitle(true));
+  nlInput.addEventListener('input', () => {
+    const d = parseNaturalDate(nlInput.value, Date.now());
+    if (d) { dateInput.value = toLocalInputValue(d.toISOString()); $('nlPreview').textContent = '→ ' + d.toLocaleString(); }
+    else $('nlPreview').textContent = nlInput.value.trim() ? "Couldn't read that — set the date below." : '';
+  });
   bgInput.addEventListener('change', () => {
     $('bgUploadWrap').classList.toggle('hidden', bgInput.value !== 'upload');
     if (bgInput.value === 'upload') bgFile.click();
@@ -1816,6 +2082,8 @@ async function init() {
   $('exportBtn').addEventListener('click', exportCountdowns);
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importCountdowns(e.target.files[0]); e.target.value = ''; });
+  $('importIcsBtn').addEventListener('click', () => $('importIcsFile').click());
+  $('importIcsFile').addEventListener('change', (e) => { if (e.target.files[0]) importIcs(e.target.files[0]); e.target.value = ''; });
 
   // card actions
   grid.addEventListener('click', (e) => {

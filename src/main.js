@@ -96,7 +96,12 @@ const DEFAULT_SETTINGS = {
   progressHeight: 8,
   progressColor: '',     // '' = each card's accent, else a hex color
   progressPosition: 'inline', // 'inline' | 'bottom' | 'top' | 'hidden'
-  barPosition: 'top'     // toolbar placement: 'top' | 'left' | 'right' | 'bottom'
+  barPosition: 'top',    // toolbar placement: 'top' | 'left' | 'right' | 'bottom'
+  menuClockEnabled: false,
+  menuClockType: 'digital',  // 'digital' | 'analog'
+  menuClockTz: '',           // '' = local
+  menuClockSize: 'medium',   // 'small' | 'medium' | 'large'
+  menuClockColor: ''         // '' = theme text color
 };
 
 function loadSettings() {
@@ -168,7 +173,15 @@ function createTray() {
     return; // tray unsupported in this environment
   }
   tray.setToolTip('Countdown Deck');
-  tray.on('click', () => showPanel());   // left-click → popover panel
+  tray.on('click', () => {
+    // While the main window is fullscreen (its own macOS Space), opening the
+    // popover window would fight with fullscreen — show the native menu instead.
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()) {
+      if (trayMenu) tray.popUpContextMenu(trayMenu);
+    } else {
+      showPanel();
+    }
+  });
   tray.on('right-click', () => {         // right-click → native menu (panel hidden first)
     if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide();
     if (trayMenu) tray.popUpContextMenu(trayMenu);
@@ -294,7 +307,7 @@ function showPanel() {
   if (!panelWindow || panelWindow.isDestroyed()) {
     panelWindow = new BrowserWindow({
       width: 300, height: 360, frame: false, resizable: false, alwaysOnTop: true,
-      skipTaskbar: true, show: false, backgroundColor: '#161f3d', webPreferences: auxWebPrefs()
+      skipTaskbar: true, show: false, fullscreenable: false, backgroundColor: '#161f3d', webPreferences: auxWebPrefs()
     });
     panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel.html'));
     panelWindow.on('blur', () => { if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide(); });
