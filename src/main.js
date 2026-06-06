@@ -453,8 +453,12 @@ function sendUpdate(payload) {
 }
 
 function setupAutoUpdates() {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // macOS can't self-apply updates unless the app is signed (Squirrel.Mac), so
+  // don't waste bandwidth downloading there — we point the user to the download
+  // instead. Windows/Linux update in place fine without signing.
+  const canAutoApply = process.platform !== 'darwin';
+  autoUpdater.autoDownload = canAutoApply;
+  autoUpdater.autoInstallOnAppQuit = canAutoApply;
   autoUpdater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
   autoUpdater.on('update-available', (i) => sendUpdate({ state: 'available', version: i.version }));
   autoUpdater.on('update-not-available', () => sendUpdate({ state: 'none' }));

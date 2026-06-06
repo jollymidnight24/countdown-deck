@@ -35,7 +35,9 @@ main { padding: 0 16px 30px; }
 .title-row .ic { font-size: 32px; line-height: 1; flex: none; }
 .title-row .t { flex: 1 1 auto; min-width: 0; font-weight: 650; font-size: 17px; overflow-wrap: break-word; word-break: normal; }
 .meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.credit { text-align: right; color: var(--muted); font-style: italic; font-size: 12px; padding: 4px 16px 20px; }
+.statusbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); margin-top: 8px; }
+.statusbar .app-name { font-size: 12px; color: var(--muted); }
+.statusbar .credit { font-size: 12px; color: var(--muted); font-style: italic; white-space: nowrap; margin-left: auto; }
 .badge { font-size: 11px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
 .badge[data-s="open"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .badge[data-s="pre"], .badge[data-s="after"] { color: #ffb05b; border-color: rgba(255,176,91,0.4); }

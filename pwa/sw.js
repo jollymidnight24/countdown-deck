@@ -1,6 +1,6 @@
 'use strict';
 // Bump CACHE on each deploy to push updates to installed PWAs.
-const CACHE = 'countdown-deck-v2';
+const CACHE = 'countdown-deck-v3';
 const ASSETS = [
   '.', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png'

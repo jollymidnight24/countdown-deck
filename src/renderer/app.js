@@ -2166,21 +2166,24 @@ function showUpdate(text, { actionable = false, warn = false } = {}) {
   b.classList.toggle('actionable', actionable);
   b.classList.toggle('warn', warn);
 }
+const isMacApp = window.api.platform === 'darwin';
 function handleUpdateStatus(p) {
   switch (p.state) {
     case 'checking': showUpdate('Checking for updates…'); break;
-    case 'available': showUpdate(`Update ${p.version} found — downloading…`); break;
+    case 'available':
+      if (isMacApp) {
+        // macOS can't self-apply unsigned updates — offer a one-click download.
+        showUpdate(`Update ${p.version} available — click to download`, { actionable: true });
+        $('updateBadge').onclick = () => { showUpdate('Opening downloads…'); window.api.openReleases(); };
+      } else {
+        showUpdate(`Update ${p.version} found — downloading…`);
+      }
+      break;
     case 'downloading': showUpdate(`Downloading update… ${p.percent}%`); break;
     case 'none': showUpdate('Up to date'); setTimeout(() => $('updateBadge').classList.add('hidden'), 3000); break;
     case 'ready':
       showUpdate(`Update ${p.version} ready — click to restart`, { actionable: true });
-      $('updateBadge').onclick = () => {
-        window.api.installUpdate();
-        // On signed builds the app quits/relaunches here. If it's still running
-        // shortly after (e.g. unsigned macOS build, where Squirrel can't apply
-        // the update), fall back to opening the Releases page for a manual update.
-        setTimeout(() => { showUpdate('Opening downloads…'); window.api.openReleases(); }, 2500);
-      };
+      $('updateBadge').onclick = () => window.api.installUpdate();
       break;
     case 'error': showUpdate('Update check failed', { warn: true }); break;
   }

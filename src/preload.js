@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  platform: process.platform,
   // data
   loadCountdowns: () => ipcRenderer.invoke('countdowns:load'),
   saveCountdowns: (countdowns) => ipcRenderer.invoke('countdowns:save', countdowns),
