@@ -14,8 +14,13 @@ contextBridge.exposeInMainWorld('api', {
   setAlwaysOnTop: (on) => ipcRenderer.invoke('window:setAlwaysOnTop', on),
   setZoom: (factor) => ipcRenderer.invoke('window:setZoom', factor),
   updateTray: (summaries) => ipcRenderer.invoke('tray:update', summaries),
+  updateAux: (list) => ipcRenderer.invoke('aux:update', list),
+  toggleMini: () => ipcRenderer.invoke('mini:toggle'),
   notify: (title, body) => ipcRenderer.invoke('notify', { title, body }),
   saveMedia: (dataURL, ext) => ipcRenderer.invoke('media:save', { dataURL, ext }),
+  chooseBackupFolder: () => ipcRenderer.invoke('backup:choose'),
+  restoreBackup: () => ipcRenderer.invoke('backup:restore'),
+  onFocusCountdown: (cb) => ipcRenderer.on('focus:countdown', (_e, id) => cb(id)),
 
   // tmdb (movies) + tvmaze (tv, exact air times)
   tmdbSearch: (query) => ipcRenderer.invoke('tmdb:search', query),

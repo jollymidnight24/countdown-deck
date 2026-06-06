@@ -27,6 +27,17 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Animated digits & urgency cues** — digits flip as they change, and timer numbers shift to amber (under an hour) then red (final minute).
 - **Per-card background dim & blur** sliders so text stays readable over any image, plus ten bundled backgrounds.
 - **Polish** — first-run welcome, empty-state illustration, smooth modal transitions, and keyboard shortcuts (**N** new, **/** search, **Esc** close).
+- **Mini widget** — a small frameless, always-on-top window showing your soonest countdown (toggle from the toolbar ▦/clock button). Keeps ticking even when the main window is hidden.
+- **Menu-bar popover** — left-click the tray icon for a quick popover list of your countdowns without opening the main window; click one to jump to it.
+- **Auto-backup & file-based sync** — pick a backup folder (e.g. inside Dropbox/iCloud/OneDrive) and a copy is written on every change; optionally load the backup on launch if it's newer, plus a one-click Restore.
+- **Command palette** — press **⌘K / Ctrl+K** to run actions (add, settings, theme, DND, group, mini widget) or fuzzy-jump to focus/edit any countdown.
+- **Custom keyboard shortcuts** — map your own key combos to core commands in Settings → Keyboard shortcuts.
+- **Customizable progress bars** — choose the bar's style (flat, rounded, striped, glow, sweep — the last three animated), height, and color (each card's accent or a custom color).
+- **Auto-snooze** — per countdown, keep re-alerting at the snooze interval until you dismiss the flash.
+
+### Tray, mini widget & windows
+
+Left-clicking the tray icon opens a small popover panel; right-click pops up the full menu (with **Show Countdown Deck** and **Quit**) and hides the popover so the two never overlap. The mini widget and popover both follow the **menu-bar / mini widget show** setting (Settings → Window), so choosing **Cycle through all** makes the widget rotate through your countdowns. Closing the main window hides it to the tray rather than quitting. The mini widget and popover are fed live from the main window each second, so the main window stays running in the background (`backgroundThrottling` is disabled to keep timers accurate while hidden).
 - A custom app icon, and **full auto-update** via `electron-updater` against GitHub Releases, with an in-app badge and one-click "restart to update."
 
 ### Trading sessions

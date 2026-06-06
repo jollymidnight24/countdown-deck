@@ -10,7 +10,9 @@ let settings = {
   dateFormat: 'system', clock: 'auto', timeZone: '',
   uiFont: 'system', uiScale: 1, dashboardBg: 'preset:nebula', dnd: false,
   quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5,
-  accent: '', viewMode: 'cards', groupByCategory: false, collapsedGroups: [], onboarded: false
+  accent: '', viewMode: 'cards', groupByCategory: false, collapsedGroups: [], onboarded: false,
+  backupFolder: '', syncOnLaunch: false, shortcuts: {},
+  progressStyle: 'rounded', progressHeight: 8, progressColor: ''
 };
 let lastTraySig = '';
 let focusId = null;
@@ -236,6 +238,7 @@ const alertSoundInput = $('alertSoundInput');
 const alertSoundFile = $('alertSoundFile');
 const alertBannerInput = $('alertBannerInput');
 const alertFlashInput = $('alertFlashInput');
+const alertAutoSnoozeInput = $('alertAutoSnoozeInput');
 const msInputs = { 1440: $('ms1440'), 60: $('ms60'), 10: $('ms10') };
 const quietEnabledInput = $('quietEnabledInput');
 const quietStartInput = $('quietStartInput');
@@ -258,6 +261,10 @@ const clockInput = $('clockInput');
 const timeZoneInput = $('timeZoneInput');
 const paletteInput = $('paletteInput');
 const accentInput = $('accentInput');
+const progressStyleInput = $('progressStyleInput');
+const progressHeightInput = $('progressHeightInput');
+const progressColorModeInput = $('progressColorModeInput');
+const progressColorInput = $('progressColorInput');
 
 // ===========================================================================
 // Helpers
@@ -286,6 +293,7 @@ function normalize(c) {
     alertSound: c.alertSound || 'none',
     alertBanner: c.alertBanner !== false,   // default on (preserves prior behavior)
     alertFlash: !!c.alertFlash,
+    alertAutoSnooze: !!c.alertAutoSnooze,
     milestones: Array.isArray(c.milestones) ? c.milestones : [],   // minutes-before-end reminders
     createdAt: c.createdAt || Date.now(),
     bgDim: c.bgDim == null ? 60 : Number(c.bgDim),
@@ -668,9 +676,143 @@ function tick() {
 
   if (focusId) updateFocus(now);
   if (changed) persist();
-  updateTray(now);
+  const aux = auxList(now);
+  const curId = pickCurrentId(now, aux);
+  updateTray(now, aux, curId);
+  window.api.updateAux({ items: aux, currentId: curId });
   tickCount++;
 }
+
+// Structured list for the mini widget + tray popover (soonest first).
+function auxList(now) {
+  return countdowns
+    .filter((c) => c.mode === 'down')
+    .map((c) => ({ c, ms: effectiveTargetMs(c, now) - now }))
+    .filter((x) => isFinite(x.ms) && x.ms > 0)
+    .sort((a, b) => a.ms - b.ms)
+    .slice(0, 12)
+    .map(({ c, ms }) => {
+      const u = unitsFromMs(ms);
+      return { id: c.id, title: c.title, color: c.color, d: u.d, h: u.h, m: u.m, s: u.s };
+    });
+}
+
+// ===========================================================================
+// Command palette (Cmd/Ctrl+K)
+// ===========================================================================
+let paletteSel = 0;
+let paletteVisible = [];
+
+// Core commands shared by the palette and the custom-shortcut mapper.
+const COMMANDS = [
+  { id: 'add', label: 'Add countdown', run: () => openModal() },
+  { id: 'settings', label: 'Open settings', run: () => openSettings() },
+  { id: 'palette', label: 'Open command palette', run: () => openPalette() },
+  { id: 'dnd', label: 'Toggle Do Not Disturb', run: () => { settings.dnd = !settings.dnd; persistSettings(); applyDnd(); } },
+  { id: 'theme', label: 'Toggle light / dark theme', run: () => { settings.theme = LIGHT_PALETTES.includes(settings.theme) ? 'dark' : 'light'; persistSettings(); applyTheme(); } },
+  { id: 'mini', label: 'Toggle mini widget', run: () => window.api.toggleMini() },
+  { id: 'group', label: 'Toggle group by category', run: () => { settings.groupByCategory = !settings.groupByCategory; $('groupBtn').classList.toggle('active', settings.groupByCategory); persistSettings(); render(); } },
+  { id: 'search', label: 'Focus search', run: () => searchInput.focus() }
+];
+
+function buildCommands() {
+  const cmds = COMMANDS.map((c) => ({ label: c.label, kind: 'action', run: c.run }));
+  for (const c of countdowns) cmds.push({ label: 'Focus: ' + c.title, kind: 'view', run: () => openFocus(c.id) });
+  for (const c of countdowns) cmds.push({ label: 'Edit: ' + c.title, kind: 'edit', run: () => openModal(c.id) });
+  return cmds;
+}
+
+// ---- custom keyboard shortcuts --------------------------------------------
+let recordingShortcut = null;
+function comboFromEvent(e) {
+  if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return null;
+  const parts = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.metaKey) parts.push('Cmd');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+  return parts.join('+');
+}
+function comboHasModifier(e) { return e.ctrlKey || e.metaKey || e.altKey; }
+
+function runShortcut(e) {
+  if (recordingShortcut) return;
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+  if (!comboHasModifier(e)) return;
+  const combo = comboFromEvent(e);
+  if (!combo) return;
+  const map = settings.shortcuts || {};
+  for (const id in map) {
+    if (map[id] === combo) {
+      const cmd = COMMANDS.find((c) => c.id === id);
+      if (cmd) { e.preventDefault(); cmd.run(); return; }
+    }
+  }
+}
+
+function renderShortcuts() {
+  const box = $('shortcutList');
+  if (!box) return;
+  box.innerHTML = '';
+  const map = settings.shortcuts || {};
+  for (const c of COMMANDS) {
+    const row = document.createElement('div');
+    row.className = 'shortcut-row';
+    row.innerHTML = `<span>${escapeHtml(c.label)}</span><span class="sc-keys">${map[c.id] ? escapeHtml(map[c.id]) : '—'}</span>`;
+    const set = document.createElement('button');
+    set.type = 'button'; set.className = 'btn ghost tiny'; set.textContent = map[c.id] ? 'Change' : 'Set';
+    set.addEventListener('click', () => startRecord(c.id, set));
+    const clr = document.createElement('button');
+    clr.type = 'button'; clr.className = 'btn ghost tiny'; clr.textContent = '✕';
+    clr.addEventListener('click', () => { const m = { ...(settings.shortcuts || {}) }; delete m[c.id]; settings.shortcuts = m; persistSettings(); renderShortcuts(); });
+    row.appendChild(set); row.appendChild(clr);
+    box.appendChild(row);
+  }
+}
+function startRecord(id, btn) {
+  recordingShortcut = id;
+  btn.textContent = 'Press keys…';
+  const handler = (e) => {
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return; // wait for the real key
+    e.preventDefault(); e.stopPropagation();
+    if (!comboHasModifier(e)) { btn.textContent = 'Use ⌘/Ctrl/Alt…'; return; }
+    settings.shortcuts = { ...(settings.shortcuts || {}), [id]: comboFromEvent(e) };
+    persistSettings();
+    recordingShortcut = null;
+    document.removeEventListener('keydown', handler, true);
+    renderShortcuts();
+  };
+  document.addEventListener('keydown', handler, true);
+}
+function fuzzy(q, s) {
+  if (!q) return true;
+  s = s.toLowerCase(); q = q.toLowerCase();
+  let i = 0;
+  for (const ch of s) { if (ch === q[i]) i++; if (i === q.length) return true; }
+  return false;
+}
+function openPalette() {
+  paletteSel = 0;
+  $('paletteInputBox').value = '';
+  $('paletteOverlay').classList.remove('hidden');
+  renderPalette('');
+  $('paletteInputBox').focus();
+}
+function closePalette() { $('paletteOverlay').classList.add('hidden'); }
+function renderPalette(q) {
+  const all = buildCommands();
+  paletteVisible = all.filter((c) => fuzzy(q, c.label)).slice(0, 40);
+  if (paletteSel >= paletteVisible.length) paletteSel = Math.max(0, paletteVisible.length - 1);
+  const box = $('paletteResults');
+  if (!paletteVisible.length) { box.innerHTML = '<div class="palette-empty">No matches</div>'; return; }
+  box.innerHTML = paletteVisible.map((c, i) =>
+    `<div class="palette-item${i === paletteSel ? ' active' : ''}" data-i="${i}"><span>${escapeHtml(c.label)}</span><span class="pi-kind">${c.kind}</span></div>`
+  ).join('');
+  box.querySelectorAll('.palette-item').forEach((el) => el.addEventListener('click', () => runPalette(+el.dataset.i)));
+}
+function runPalette(i) { const c = paletteVisible[i]; if (c) { closePalette(); c.run(); } }
 
 // ===========================================================================
 // Focus mode (single countdown, full screen)
@@ -696,41 +838,28 @@ function updateFocus(now) {
   $('focusTarget').textContent = formatTarget(c);
 }
 
-// Active (still-counting-down) entries, soonest first.
-function trayEntries(now) {
-  return countdowns
-    .filter((c) => c.mode === 'down')
-    .map((c) => ({ id: c.id, title: c.title, ms: effectiveTargetMs(c, now) - now }))
-    .filter((x) => x.ms > 0)
-    .sort((a, b) => a.ms - b.ms)
-    .map((x) => {
-      const u = unitsFromMs(x.ms);
-      return { id: x.id, label: `${x.title}: ${u.d}d ${pad(u.h)}h ${pad(u.m)}m` };
-    });
-}
-
-function updateTray(now) {
-  const entries = trayEntries(now);
-  const items = entries.slice(0, 8).map((e) => e.label);
-
-  let title = '';
-  if (entries.length) {
-    if (settings.trayMode === 'specific') {
-      const e = entries.find((x) => x.id === settings.trayId);
-      title = (e || entries[0]).label;          // fall back if the chosen one elapsed
-    } else if (settings.trayMode === 'cycle') {
-      const secs = Math.min(120, Math.max(2, Number(settings.trayCycleSecs) || 6));
-      const idx = Math.floor(now / (secs * 1000)) % entries.length;
-      title = entries[idx].label;
-    } else {
-      title = entries[0].label;                 // soonest
-    }
+// Which countdown the menu-bar + mini widget should currently show.
+function pickCurrentId(now, items) {
+  if (!items.length) return null;
+  if (settings.trayMode === 'specific') {
+    return items.some((x) => x.id === settings.trayId) ? settings.trayId : items[0].id;
   }
+  if (settings.trayMode === 'cycle') {
+    const secs = Math.min(120, Math.max(2, Number(settings.trayCycleSecs) || 6));
+    return items[Math.floor(now / (secs * 1000)) % items.length].id;
+  }
+  return items[0].id;
+}
+const trayLabel = (it) => `${it.title}: ${it.d}d ${pad(it.h)}h ${pad(it.m)}m`;
 
-  const sig = title + '|' + items.join('§');
+function updateTray(now, items, curId) {
+  const labels = items.slice(0, 8).map(trayLabel);
+  const cur = items.find((x) => x.id === curId);
+  const title = cur ? trayLabel(cur) : '';
+  const sig = title + '|' + labels.join('§');
   if (sig === lastTraySig) return;              // avoid redundant IPC every second
   lastTraySig = sig;
-  window.api.updateTray({ title, items });
+  window.api.updateTray({ title, items: labels });
 }
 
 function refreshCategoryControls() {
@@ -805,10 +934,23 @@ function showFlash(c) {
   if (flashTimer) clearTimeout(flashTimer);
   flashTimer = setTimeout(dismissFlash, 12000);
 }
+let autoSnoozeTimer = null;
+function stopAutoSnooze() { if (autoSnoozeTimer) { clearInterval(autoSnoozeTimer); autoSnoozeTimer = null; } }
+function startAutoSnooze(c) {
+  stopAutoSnooze();
+  autoSnoozeTimer = setInterval(() => {
+    if (settings.dnd || isQuietNow()) return;
+    if (c.alertSound && c.alertSound !== 'none') playSound(c.alertSound);
+    showFlash(c);
+    window.api.notify('Still waiting', `${c.title} — dismiss to stop reminding.`);
+  }, snoozeMs());
+}
+
 function dismissFlash() {
   $('flashOverlay').classList.add('hidden');
   if (flashTimer) { clearTimeout(flashTimer); flashTimer = null; }
   flashCountdownId = null;
+  stopAutoSnooze();
   stopSound();
 }
 function snoozeMs() { return Math.min(120, Math.max(1, Number(settings.snoozeMinutes) || 5)) * 60000; }
@@ -838,11 +980,19 @@ function fireAlerts(c, opts = {}) {
     if (c.alertBanner !== false) window.api.notify(title, body);
   }
   if (c.alertSound && c.alertSound !== 'none') playSound(c.alertSound);
-  if (c.alertFlash || opts.test) showFlash(c);
+  if (c.alertFlash || opts.test || c.alertAutoSnooze) showFlash(c);
+  // Auto-snooze: keep re-alerting until the flash is dismissed (not for tests).
+  if (c.alertAutoSnooze && !opts.test) startAutoSnooze(c);
 }
 
 function applyUiFont() { document.body.style.setProperty('--ui-font', FONTS[settings.uiFont] || FONTS.system); }
 function applyUiScale() { window.api.setZoom(Number(settings.uiScale) || 1); }
+function applyProgress() {
+  document.body.dataset.progress = settings.progressStyle || 'rounded';
+  document.body.style.setProperty('--progress-h', (Number(settings.progressHeight) || 8) + 'px');
+  if (settings.progressColor) document.body.style.setProperty('--progress-color', settings.progressColor);
+  else document.body.style.removeProperty('--progress-color');
+}
 
 let canvasRAF = null;
 function stopCanvas() { if (canvasRAF) cancelAnimationFrame(canvasRAF); canvasRAF = null; }
@@ -1040,6 +1190,7 @@ function openModal(editId = null) {
     alertSoundInput.value = c.alertSound || 'none';
     alertBannerInput.checked = c.alertBanner !== false;
     alertFlashInput.checked = !!c.alertFlash;
+    alertAutoSnoozeInput.checked = !!c.alertAutoSnooze;
     for (const m of [1440, 60, 10]) msInputs[m].checked = (c.milestones || []).includes(m);
   } else {
     modalTitle.textContent = 'Add countdown';
@@ -1058,6 +1209,7 @@ function openModal(editId = null) {
     alertSoundInput.value = 'none';
     alertBannerInput.checked = true;
     alertFlashInput.checked = false;
+    alertAutoSnoozeInput.checked = false;
     for (const m of [1440, 60, 10]) msInputs[m].checked = false;
   }
   syncKindFields();
@@ -1084,6 +1236,7 @@ function saveFromForm(evt) {
     alertSound: soundValueOrNone(alertSoundInput.value),
     alertBanner: alertBannerInput.checked,
     alertFlash: alertFlashInput.checked,
+    alertAutoSnooze: alertAutoSnoozeInput.checked,
     milestones: [1440, 60, 10].filter((m) => msInputs[m].checked)
   };
 
@@ -1232,6 +1385,11 @@ function openSettings() {
   // Appearance
   paletteInput.value = settings.theme || 'dark';
   accentInput.value = settings.accent || currentAccentHex();
+  progressStyleInput.value = settings.progressStyle || 'rounded';
+  progressHeightInput.value = Number(settings.progressHeight) || 8;
+  progressColorModeInput.value = settings.progressColor ? 'custom' : 'accent';
+  progressColorInput.value = settings.progressColor || '#5b8cff';
+  $('progressColorWrap').classList.toggle('hidden', !settings.progressColor);
   buildFontSelect(uiFontInput, false);
   uiFontInput.value = settings.uiFont || 'system';
   uiScaleInput.value = String(settings.uiScale || 1);
@@ -1255,6 +1413,12 @@ function openSettings() {
   quietStartInput.value = settings.quietStart || '22:00';
   quietEndInput.value = settings.quietEnd || '07:00';
   snoozeMinutesInput.value = settings.snoozeMinutes || 5;
+
+  // Backup & sync
+  $('backupFolderLabel').textContent = settings.backupFolder ? `Backup folder: ${settings.backupFolder}` : 'No backup folder set.';
+  $('syncOnLaunchInput').checked = !!settings.syncOnLaunch;
+
+  renderShortcuts();
 
   // Tray picker
   const opts = countdowns.filter((c) => c.mode === 'down');
@@ -1286,6 +1450,7 @@ function saveSettings() {
   settings.quietStart = quietStartInput.value || '22:00';
   settings.quietEnd = quietEndInput.value || '07:00';
   settings.snoozeMinutes = Math.min(120, Math.max(1, Number(snoozeMinutesInput.value) || 5));
+  settings.syncOnLaunch = $('syncOnLaunchInput').checked;
   persistSettings();
 
   window.api.setAlwaysOnTop(settings.alwaysOnTop);
@@ -1426,6 +1591,7 @@ async function init() {
   applyDnd();
   applyUiFont();
   applyUiScale();
+  applyProgress();
   applyDashboardBg();
   sortSelect.value = settings.sort;
   viewSelect.value = settings.viewMode || 'cards';
@@ -1469,7 +1635,48 @@ async function init() {
     settings.accent = ''; persistSettings(); applyTheme();
     accentInput.value = currentAccentHex();
   });
+  progressStyleInput.addEventListener('change', () => { settings.progressStyle = progressStyleInput.value; persistSettings(); applyProgress(); });
+  progressHeightInput.addEventListener('input', () => { settings.progressHeight = Number(progressHeightInput.value); persistSettings(); applyProgress(); });
+  progressColorModeInput.addEventListener('change', () => {
+    const custom = progressColorModeInput.value === 'custom';
+    $('progressColorWrap').classList.toggle('hidden', !custom);
+    settings.progressColor = custom ? progressColorInput.value : '';
+    persistSettings(); applyProgress();
+  });
+  progressColorInput.addEventListener('input', () => {
+    if (progressColorModeInput.value === 'custom') { settings.progressColor = progressColorInput.value; persistSettings(); applyProgress(); }
+  });
   $('welcomeClose').addEventListener('click', () => { $('welcomeOverlay').classList.add('hidden'); settings.onboarded = true; persistSettings(); });
+  $('miniBtn').addEventListener('click', () => window.api.toggleMini());
+
+  // Backup & sync
+  $('backupChooseBtn').addEventListener('click', async () => {
+    const folder = await window.api.chooseBackupFolder();
+    if (folder) {
+      settings.backupFolder = folder; persistSettings();
+      $('backupFolderLabel').textContent = `Backup folder: ${folder}`;
+      persist();   // write an immediate backup copy
+    }
+  });
+  $('backupRestoreBtn').addEventListener('click', async () => {
+    const data = await window.api.restoreBackup();
+    if (!Array.isArray(data)) { alert('No backup found in the chosen folder.'); return; }
+    if (!confirm(`Restore ${data.length} countdown(s) from backup? This replaces your current list.`)) return;
+    countdowns = data.map(normalize); persist(); render(); closeSettings();
+  });
+
+  // Open a countdown in focus mode when the tray popover requests it
+  window.api.onFocusCountdown((id) => openFocus(id));
+
+  // Command palette
+  $('paletteInputBox').addEventListener('input', (e) => { paletteSel = 0; renderPalette(e.target.value); });
+  $('paletteOverlay').addEventListener('click', (e) => { if (e.target.id === 'paletteOverlay') closePalette(); });
+  $('paletteInputBox').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); paletteSel = Math.min(paletteSel + 1, paletteVisible.length - 1); renderPalette($('paletteInputBox').value); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); paletteSel = Math.max(paletteSel - 1, 0); renderPalette($('paletteInputBox').value); }
+    else if (e.key === 'Enter') { e.preventDefault(); runPalette(paletteSel); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  });
   $('dndBtn').addEventListener('click', () => {
     settings.dnd = !settings.dnd;
     persistSettings(); applyDnd();
@@ -1532,12 +1739,18 @@ async function init() {
 
   // overlays
   for (const m of [modal, settingsModal]) m.addEventListener('click', (e) => { if (e.target === m) m.classList.add('hidden'); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); closeFocus(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeSettings(); dismissFlash(); closeFocus(); closePalette(); } });
+  // Command palette: Cmd/Ctrl+K (works anywhere)
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+  });
+  // User-mapped custom shortcuts
+  document.addEventListener('keydown', runShortcut);
   // Global shortcuts: N = new, / = search (ignored while typing or in a modal)
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-    if (!modal.classList.contains('hidden') || !settingsModal.classList.contains('hidden')) return;
+    if (!modal.classList.contains('hidden') || !settingsModal.classList.contains('hidden') || !$('paletteOverlay').classList.contains('hidden')) return;
     if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openModal(); }
     else if (e.key === '/') { e.preventDefault(); searchInput.focus(); }
   });

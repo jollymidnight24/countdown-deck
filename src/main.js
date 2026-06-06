@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, protocol, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -38,9 +38,31 @@ function writeJSON(file, value) {
   }
 }
 
+function backupFile() {
+  const s = loadSettings();
+  return s.backupFolder ? path.join(s.backupFolder, 'countdown-deck-backup.json') : null;
+}
+function mtime(file) { try { return fs.statSync(file).mtimeMs; } catch (_) { return 0; } }
+
 function loadCountdowns() {
+  // Optional file-based sync: if a backup is newer than the local copy, prefer it.
+  const s = loadSettings();
+  const bf = backupFile();
+  if (s.syncOnLaunch && bf && mtime(bf) > mtime(dataFile())) {
+    const fromBackup = readJSON(bf, null);
+    if (Array.isArray(fromBackup)) {
+      writeJSON(dataFile(), fromBackup);
+      return fromBackup;
+    }
+  }
   const v = readJSON(dataFile(), null);
   return Array.isArray(v) ? v : null;
+}
+
+function writeBackup(countdowns) {
+  const bf = backupFile();
+  if (!bf) return;
+  try { fs.writeFileSync(bf, JSON.stringify(countdowns, null, 2), 'utf-8'); } catch (err) { console.error('Backup failed:', err); }
 }
 
 const DEFAULT_SETTINGS = {
@@ -66,7 +88,13 @@ const DEFAULT_SETTINGS = {
   viewMode: 'cards',     // 'cards' | 'compact' | 'list'
   groupByCategory: false,
   collapsedGroups: [],   // category names collapsed in grouped view
-  onboarded: false       // first-run welcome shown
+  onboarded: false,      // first-run welcome shown
+  backupFolder: '',      // folder to auto-write a backup copy into
+  syncOnLaunch: false,   // on launch, load the backup if it's newer than local
+  shortcuts: {},         // commandId -> key combo string
+  progressStyle: 'rounded',
+  progressHeight: 8,
+  progressColor: ''      // '' = each card's accent, else a hex color
 };
 
 function loadSettings() {
@@ -102,7 +130,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      autoplayPolicy: 'no-user-gesture-required'  // let alarm sounds play on timer
+      autoplayPolicy: 'no-user-gesture-required', // let alarm sounds play on timer
+      backgroundThrottling: false                 // keep ticking for the mini widget when hidden
     }
   });
 
@@ -137,7 +166,11 @@ function createTray() {
     return; // tray unsupported in this environment
   }
   tray.setToolTip('Countdown Deck');
-  tray.on('click', showWindow);
+  tray.on('click', () => showPanel());   // left-click → popover panel
+  tray.on('right-click', () => {         // right-click → native menu (panel hidden first)
+    if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide();
+    if (trayMenu) tray.popUpContextMenu(trayMenu);
+  });
   updateTray({});
 }
 
@@ -148,6 +181,7 @@ function showWindow() {
   mainWindow.focus();
 }
 
+let trayMenu = null;
 function updateTray(payload) {
   if (!tray) return;
   const p = payload || {};
@@ -160,7 +194,10 @@ function updateTray(payload) {
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
   ];
-  tray.setContextMenu(Menu.buildFromTemplate(template));
+  // Build the menu but DON'T bind it as the default context menu — we show it
+  // only on explicit right-click so left-click can show the popover panel
+  // without the two overlapping.
+  trayMenu = Menu.buildFromTemplate(template);
   if (process.platform === 'darwin' && tray.setTitle) {
     tray.setTitle(p.title ? ' ' + p.title : '');
   }
@@ -224,6 +261,62 @@ async function tmdbDetail(type, id) {
 }
 
 // ---------------------------------------------------------------------------
+// Auxiliary windows: always-on-top mini widget + tray popover panel
+// ---------------------------------------------------------------------------
+let miniWindow = null;
+let panelWindow = null;
+let lastAux = [];        // most recent countdown summary list from the renderer
+let lastCurrentId = null; // which one the menu-bar/mini should highlight
+
+function auxWebPrefs() {
+  return {
+    preload: path.join(__dirname, 'aux-preload.js'),
+    contextIsolation: true, nodeIntegration: false, sandbox: true
+  };
+}
+
+function toggleMini() {
+  if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.close(); miniWindow = null; return; }
+  miniWindow = new BrowserWindow({
+    width: 300, height: 150, resizable: false, frame: false, alwaysOnTop: true,
+    skipTaskbar: true, fullscreenable: false, backgroundColor: '#161f3d',
+    webPreferences: auxWebPrefs()
+  });
+  miniWindow.loadFile(path.join(__dirname, 'renderer', 'mini.html'));
+  miniWindow.on('closed', () => { miniWindow = null; });
+  miniWindow.webContents.on('did-finish-load', () => pushAux());
+}
+
+function showPanel() {
+  if (!panelWindow || panelWindow.isDestroyed()) {
+    panelWindow = new BrowserWindow({
+      width: 300, height: 360, frame: false, resizable: false, alwaysOnTop: true,
+      skipTaskbar: true, show: false, backgroundColor: '#161f3d', webPreferences: auxWebPrefs()
+    });
+    panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel.html'));
+    panelWindow.on('blur', () => { if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide(); });
+    panelWindow.webContents.on('did-finish-load', () => pushAux());
+  }
+  // Position near the tray icon when we can, else top-right.
+  try {
+    const b = tray ? tray.getBounds() : null;
+    const wb = panelWindow.getBounds();
+    if (b && b.width) {
+      panelWindow.setPosition(Math.round(b.x + b.width / 2 - wb.width / 2), Math.round(b.y + b.height + 4));
+    }
+  } catch (_) {}
+  panelWindow.show();
+  panelWindow.focus();
+  pushAux();
+}
+
+function pushAux() {
+  const top = lastAux.find((x) => x.id === lastCurrentId) || lastAux[0] || null;
+  if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('mini:data', top);
+  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.webContents.send('panel:data', lastAux);
+}
+
+// ---------------------------------------------------------------------------
 // TVmaze lookup (free, no API key) — gives exact episode air times.
 // ---------------------------------------------------------------------------
 async function tvmazeSearch(query) {
@@ -264,7 +357,13 @@ async function tvmazeNext(showId) {
 // IPC
 // ---------------------------------------------------------------------------
 ipcMain.handle('countdowns:load', () => loadCountdowns());
-ipcMain.handle('countdowns:save', (_e, v) => writeJSON(dataFile(), v));
+ipcMain.handle('countdowns:save', (_e, v) => { const ok = writeJSON(dataFile(), v); writeBackup(v); return ok; });
+ipcMain.handle('backup:choose', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  return r.filePaths[0];
+});
+ipcMain.handle('backup:restore', () => { const bf = backupFile(); return bf ? readJSON(bf, null) : null; });
 ipcMain.handle('settings:load', () => loadSettings());
 ipcMain.handle('settings:save', (_e, v) => {
   const ok = writeJSON(settingsFile(), Object.assign({}, DEFAULT_SETTINGS, v));
@@ -292,6 +391,19 @@ ipcMain.handle('media:save', (_e, payload) => {
   }
 });
 ipcMain.handle('tray:update', (_e, summaries) => updateTray(summaries));
+ipcMain.handle('aux:update', (_e, payload) => {
+  lastAux = payload && Array.isArray(payload.items) ? payload.items : [];
+  lastCurrentId = payload ? payload.currentId : null;
+  pushAux();
+});
+ipcMain.handle('mini:toggle', () => toggleMini());
+ipcMain.handle('mini:close', () => { if (miniWindow && !miniWindow.isDestroyed()) { miniWindow.close(); miniWindow = null; } });
+ipcMain.handle('window:show', () => { showWindow(); });
+ipcMain.handle('panel:focus', (_e, id) => {
+  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.hide();
+  showWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('focus:countdown', id);
+});
 ipcMain.handle('tmdb:search', (_e, query) => tmdbSearch(query));
 ipcMain.handle('tmdb:detail', (_e, payload) => tmdbDetail(payload && payload.type, payload && payload.id));
 ipcMain.handle('tvmaze:search', (_e, query) => tvmazeSearch(query));

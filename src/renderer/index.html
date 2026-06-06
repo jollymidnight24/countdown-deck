@@ -62,6 +62,7 @@
         <option value="list">List</option>
       </select>
       <button id="groupBtn" class="btn ghost icon-btn" title="Group by category">&#9638;</button>
+      <button id="miniBtn" class="btn ghost icon-btn" title="Mini always-on-top widget">&#128470;</button>
       <button id="dndBtn" class="btn ghost icon-btn" title="Mute all alerts (Do Not Disturb)">&#128276;</button>
       <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
       <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
@@ -179,6 +180,7 @@
           </div>
           <label class="switch-row"><span>Banner notification</span><input id="alertBannerInput" type="checkbox" checked /></label>
           <label class="switch-row"><span>Full-screen flash</span><input id="alertFlashInput" type="checkbox" /></label>
+          <label class="switch-row"><span>Keep alerting until dismissed (auto-snooze)</span><input id="alertAutoSnoozeInput" type="checkbox" /></label>
           <div class="milestones">
             <span class="ms-label">Heads-up before it ends:</span>
             <label class="ms-check"><input type="checkbox" id="ms1440" /> 1 day</label>
@@ -249,6 +251,27 @@
         <label>&nbsp;
           <button type="button" id="accentReset" class="btn ghost" style="width:100%">Reset accent to palette</button>
         </label>
+        <label>Progress bar style
+          <select id="progressStyleInput">
+            <option value="flat">Flat</option>
+            <option value="rounded">Rounded</option>
+            <option value="striped">Striped (animated)</option>
+            <option value="glow">Glow (animated)</option>
+            <option value="sweep">Sweep (animated)</option>
+          </select>
+        </label>
+        <label>Progress bar height
+          <input id="progressHeightInput" type="range" min="4" max="20" value="8" />
+        </label>
+        <label>Progress bar color
+          <select id="progressColorModeInput">
+            <option value="accent">Match each card's accent</option>
+            <option value="custom">Custom color</option>
+          </select>
+        </label>
+        <label id="progressColorWrap" class="hidden">Custom progress color
+          <input id="progressColorInput" type="color" value="#5b8cff" />
+        </label>
         <label>UI font
           <select id="uiFontInput"></select>
         </label>
@@ -304,7 +327,7 @@
         <span>Keep window always on top</span>
         <input id="alwaysOnTopInput" type="checkbox" />
       </label>
-      <label>Menu-bar / tray shows
+      <label>Menu-bar &amp; mini widget show
         <select id="trayModeInput">
           <option value="soonest">Soonest countdown</option>
           <option value="specific">A specific countdown</option>
@@ -322,6 +345,19 @@
       </label>
       <p class="hint">Get a free key at themoviedb.org → Settings → API. Stored locally on your machine only. (TV uses TVmaze — no key needed.)</p>
 
+      <h3 class="settings-h">Keyboard shortcuts</h3>
+      <p class="hint">Click Set, then press a combo with ⌘/Ctrl/Alt. These work anywhere in the app.</p>
+      <div id="shortcutList"></div>
+
+      <h3 class="settings-h">Backup &amp; sync</h3>
+      <p class="hint" id="backupFolderLabel">No backup folder set.</p>
+      <div class="io-row">
+        <button type="button" id="backupChooseBtn" class="btn ghost">Choose backup folder…</button>
+        <button type="button" id="backupRestoreBtn" class="btn ghost">Restore from backup</button>
+      </div>
+      <label class="switch-row"><span>On launch, load backup if it's newer (file-based sync)</span><input id="syncOnLaunchInput" type="checkbox" /></label>
+      <p class="hint">A copy is written to the folder on every change. Point it at a Dropbox/iCloud/OneDrive folder to sync across machines.</p>
+
       <hr />
       <div class="io-row">
         <button type="button" id="exportBtn" class="btn ghost">Export countdowns…</button>
@@ -332,6 +368,14 @@
         <button type="button" id="settingsCloseBtn" class="btn ghost">Close</button>
         <button type="button" id="settingsSaveBtn" class="btn primary">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Command palette -->
+  <div id="paletteOverlay" class="hidden">
+    <div class="palette">
+      <input id="paletteInputBox" type="text" placeholder="Type a command or countdown…  (↑↓ to move, Enter to run)" />
+      <div id="paletteResults" class="palette-results"></div>
     </div>
   </div>
 

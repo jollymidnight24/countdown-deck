@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>Countdowns</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #e8edff; background: #161f3d; user-select: none; padding: 8px;
+    }
+    h1 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #93a0c9; margin: 4px 6px 8px; }
+    .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+    .item:hover { background: rgba(255,255,255,0.07); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .it { flex: 1; min-width: 0; }
+    .t { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .r { font-size: 12px; color: #93a0c9; font-variant-numeric: tabular-nums; }
+    .empty { color: #93a0c9; font-size: 13px; padding: 16px; text-align: center; }
+    .foot { margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; }
+    .open { width: 100%; background: #5b8cff; color: #fff; border: none; border-radius: 9px; padding: 9px; font-size: 13px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Countdowns</h1>
+  <div id="list"></div>
+  <div class="foot"><button class="open" id="open">Open Countdown Deck</button></div>
+  <script src="panel.js"></script>
+</body>
+</html>
