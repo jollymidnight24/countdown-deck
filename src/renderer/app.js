@@ -2174,7 +2174,13 @@ function handleUpdateStatus(p) {
     case 'none': showUpdate('Up to date'); setTimeout(() => $('updateBadge').classList.add('hidden'), 3000); break;
     case 'ready':
       showUpdate(`Update ${p.version} ready — click to restart`, { actionable: true });
-      $('updateBadge').onclick = () => window.api.installUpdate();
+      $('updateBadge').onclick = () => {
+        window.api.installUpdate();
+        // On signed builds the app quits/relaunches here. If it's still running
+        // shortly after (e.g. unsigned macOS build, where Squirrel can't apply
+        // the update), fall back to opening the Releases page for a manual update.
+        setTimeout(() => { showUpdate('Opening downloads…'); window.api.openReleases(); }, 2500);
+      };
       break;
     case 'error': showUpdate('Update check failed', { warn: true }); break;
   }

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   // updates
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   installUpdate: () => ipcRenderer.invoke('updates:install'),
+  openReleases: () => ipcRenderer.invoke('updates:openReleases'),
   onUpdateStatus: (cb) => {
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on('update:status', listener);

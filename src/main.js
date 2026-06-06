@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, protocol, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, protocol, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -443,6 +443,7 @@ ipcMain.handle('updates:check', async () => {
   }
 });
 ipcMain.handle('updates:install', () => autoUpdater.quitAndInstall());
+ipcMain.handle('updates:openReleases', () => shell.openExternal('https://github.com/jollymidnight24/countdown-deck/releases/latest'));
 
 // ---------------------------------------------------------------------------
 // Auto-update wiring (electron-updater -> GitHub Releases)
