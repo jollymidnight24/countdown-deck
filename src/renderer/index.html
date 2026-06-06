@@ -41,10 +41,18 @@
   </div>
 
   <header class="topbar">
-    <div class="brand">
-      <span class="logo">&#9203;</span>
-      <h1>Countdown Deck</h1>
-    </div>
+    <button class="brand" id="homeBtn" title="Home — show all countdowns">
+      <svg class="brand-logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="7" y="4" width="18" height="3" rx="1.5" fill="currentColor"/>
+        <rect x="7" y="25" width="18" height="3" rx="1.5" fill="currentColor"/>
+        <path d="M9 7 L23 7 L16 16 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M16 16 L23 25 L9 25 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M12.5 11 L19.5 11 L16 16 Z" fill="#ffd166"/>
+        <path d="M11 25 L21 25 L16 20 Z" fill="#ffd166"/>
+      </svg>
+      <span class="brand-monogram">CD</span>
+      <span class="brand-sub">Countdown<br>Deck</span>
+    </button>
 
     <div class="toolbar">
       <input id="searchInput" type="search" class="search" placeholder="Search…" />
@@ -56,20 +64,26 @@
       <select id="categoryFilter" class="select" title="Filter by category">
         <option value="">All categories</option>
       </select>
-      <select id="viewSelect" class="select" title="View density">
+      <select id="viewSelect" class="select" title="Layout">
         <option value="cards">Cards</option>
         <option value="compact">Compact</option>
         <option value="list">List</option>
+        <option value="column">Column</option>
+        <option value="gallery">Gallery</option>
+        <option value="fan">Fan</option>
       </select>
-      <button id="groupBtn" class="btn ghost icon-btn" title="Group by category">&#9638;</button>
-      <button id="miniBtn" class="btn ghost icon-btn" title="Mini always-on-top widget">&#128470;</button>
-      <button id="dndBtn" class="btn ghost icon-btn" title="Mute all alerts (Do Not Disturb)">&#128276;</button>
-      <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
-      <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
+      <div class="tool-icons">
+        <button id="groupBtn" class="btn ghost icon-btn" title="Group by category">&#9638;</button>
+        <button id="miniBtn" class="btn ghost icon-btn" title="Mini always-on-top widget">&#128470;</button>
+        <button id="dndBtn" class="btn ghost icon-btn" title="Mute all alerts (Do Not Disturb)">&#128276;</button>
+        <button id="themeBtn" class="btn ghost icon-btn" title="Toggle light/dark">&#9790;</button>
+        <button id="settingsBtn" class="btn ghost icon-btn" title="Settings">&#9881;</button>
+      </div>
       <button id="addBtn" class="btn primary">+ Add</button>
     </div>
   </header>
 
+  <div id="content">
   <div class="subbar">
     <div id="updateBadge" class="update-badge hidden"></div>
     <div class="subbar-right">
@@ -77,6 +91,8 @@
       <span id="versionTag" class="version-tag"></span>
     </div>
   </div>
+
+  <div id="tabsBar" class="tabs hidden"></div>
 
   <main>
     <section id="emptyState" class="empty-state hidden">
@@ -96,6 +112,7 @@
     </section>
     <div id="grid" class="grid"></div>
   </main>
+  </div><!-- /#content -->
 
   <!-- Add / Edit modal -->
   <div id="modal" class="modal-overlay hidden">
@@ -192,6 +209,12 @@
         <fieldset class="appearance">
           <legend>Appearance for this countdown</legend>
           <div class="form-grid">
+            <label>Icon
+              <select id="iconInput"></select>
+            </label>
+            <label id="iconUploadWrap" class="hidden">Upload icon (image)
+              <input id="iconFile" type="file" accept="image/*" />
+            </label>
             <label>Background
               <select id="bgInput"></select>
             </label>
@@ -233,7 +256,7 @@
     <div class="modal">
       <h2>Settings</h2>
 
-      <h3 class="settings-h">Appearance</h3>
+      <details class="settings-section" open><summary>Appearance &amp; layout</summary>
       <div class="form-grid">
         <label>Theme palette
           <select id="paletteInput">
@@ -263,6 +286,22 @@
         <label>Progress bar height
           <input id="progressHeightInput" type="range" min="4" max="20" value="8" />
         </label>
+        <label>Progress bar position
+          <select id="progressPositionInput">
+            <option value="inline">Below the timer</option>
+            <option value="bottom">Bottom edge</option>
+            <option value="top">Top edge</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </label>
+        <label>Toolbar position
+          <select id="barPositionInput">
+            <option value="top">Top</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="bottom">Bottom</option>
+          </select>
+        </label>
         <label>Progress bar color
           <select id="progressColorModeInput">
             <option value="accent">Match each card's accent</option>
@@ -291,7 +330,8 @@
         </label>
       </div>
 
-      <h3 class="settings-h">Date &amp; time</h3>
+      </details>
+      <details class="settings-section" open><summary>Date &amp; time</summary>
       <div class="form-grid">
         <label>Date / time format
           <select id="dateFormatInput">
@@ -314,7 +354,8 @@
         </label>
       </div>
 
-      <h3 class="settings-h">Alerts</h3>
+      </details>
+      <details class="settings-section" open><summary>Alerts</summary>
       <label class="switch-row"><span>Quiet hours (mute all alerts during a window)</span><input id="quietEnabledInput" type="checkbox" /></label>
       <div class="form-grid">
         <label>Quiet from <input id="quietStartInput" type="time" /></label>
@@ -322,7 +363,8 @@
         <label>Snooze length (minutes) <input id="snoozeMinutesInput" type="number" min="1" max="120" /></label>
       </div>
 
-      <h3 class="settings-h">Window &amp; lookups</h3>
+      </details>
+      <details class="settings-section" open><summary>Window &amp; lookups</summary>
       <label class="switch-row">
         <span>Keep window always on top</span>
         <input id="alwaysOnTopInput" type="checkbox" />
@@ -345,11 +387,13 @@
       </label>
       <p class="hint">Get a free key at themoviedb.org → Settings → API. Stored locally on your machine only. (TV uses TVmaze — no key needed.)</p>
 
-      <h3 class="settings-h">Keyboard shortcuts</h3>
+      </details>
+      <details class="settings-section"><summary>Keyboard shortcuts</summary>
       <p class="hint">Click Set, then press a combo with ⌘/Ctrl/Alt. These work anywhere in the app.</p>
       <div id="shortcutList"></div>
 
-      <h3 class="settings-h">Backup &amp; sync</h3>
+      </details>
+      <details class="settings-section"><summary>Backup &amp; sync</summary>
       <p class="hint" id="backupFolderLabel">No backup folder set.</p>
       <div class="io-row">
         <button type="button" id="backupChooseBtn" class="btn ghost">Choose backup folder…</button>
@@ -358,12 +402,15 @@
       <label class="switch-row"><span>On launch, load backup if it's newer (file-based sync)</span><input id="syncOnLaunchInput" type="checkbox" /></label>
       <p class="hint">A copy is written to the folder on every change. Point it at a Dropbox/iCloud/OneDrive folder to sync across machines.</p>
 
-      <hr />
+      </details>
+      <details class="settings-section"><summary>Data (export / import)</summary>
       <div class="io-row">
         <button type="button" id="exportBtn" class="btn ghost">Export countdowns…</button>
         <button type="button" id="importBtn" class="btn ghost">Import countdowns…</button>
         <input id="importFile" type="file" accept="application/json" class="hidden" />
       </div>
+      </details>
+
       <div class="modal-actions">
         <button type="button" id="settingsCloseBtn" class="btn ghost">Close</button>
         <button type="button" id="settingsSaveBtn" class="btn primary">Save</button>

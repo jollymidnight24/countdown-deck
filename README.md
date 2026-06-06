@@ -23,7 +23,7 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Per-countdown backgrounds** — auto gradient from the accent color, a bundled generated image, an animated gradient/canvas, or **your own uploaded image / GIF / video**. Same options for the **dashboard background**, generated and set by default.
 - **Fonts and sizes** — pick the overall UI font and size, and a font and text size per countdown.
 - **Theme palettes & accent** — six curated palettes (Midnight, Daylight, Slate, Mocha, Forest, Rose) plus a global accent-color override.
-- **View density & grouping** — switch between Cards, Compact, and List layouts, and optionally group countdowns into collapsible category sections.
+- **Six layouts** — Cards, Compact, List, Column, Gallery, and Fan — plus optional collapsible category grouping. The progress bar shows in every layout.
 - **Animated digits & urgency cues** — digits flip as they change, and timer numbers shift to amber (under an hour) then red (final minute).
 - **Per-card background dim & blur** sliders so text stays readable over any image, plus ten bundled backgrounds.
 - **Polish** — first-run welcome, empty-state illustration, smooth modal transitions, and keyboard shortcuts (**N** new, **/** search, **Esc** close).
@@ -32,7 +32,11 @@ A cross-platform desktop dashboard of live countdown timers. Track anything with
 - **Auto-backup & file-based sync** — pick a backup folder (e.g. inside Dropbox/iCloud/OneDrive) and a copy is written on every change; optionally load the backup on launch if it's newer, plus a one-click Restore.
 - **Command palette** — press **⌘K / Ctrl+K** to run actions (add, settings, theme, DND, group, mini widget) or fuzzy-jump to focus/edit any countdown.
 - **Custom keyboard shortcuts** — map your own key combos to core commands in Settings → Keyboard shortcuts.
-- **Customizable progress bars** — choose the bar's style (flat, rounded, striped, glow, sweep — the last three animated), height, and color (each card's accent or a custom color).
+- **Customizable progress bars** — choose the bar's style (flat, rounded, striped, glow, sweep — the last three animated), height, **position** (below the timer, bottom edge, top edge, or hidden), and color.
+- **Per-card icons** — an icon before each title, chosen automatically from the category/kind (e.g. 💲 for markets, 🚀 for space, 📺 for TV), or set to any emoji or your own uploaded image. Icons also appear in the mini widget, tray popover, and menu-bar text.
+- **Home button + category tabs** — click the **Countdown Deck** wordmark (now a styled logo) to return to all countdowns; a browser-style tab strip switches between **All** and each category.
+- **Configurable toolbar position** — place the toolbar at the top, left, right, or bottom of the window.
+- **Mini widget upgrades** — **scroll** over it to cycle through countdowns, it shows a progress bar, and it matches your progress-bar styling and icons.
 - **Auto-snooze** — per countdown, keep re-alerting at the snooze interval until you dismiss the flash.
 
 ### Tray, mini widget & windows

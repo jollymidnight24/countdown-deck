@@ -1,7 +1,7 @@
 {
   "name": "countdown-deck",
   "productName": "Countdown Deck",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "A cross-platform desktop dashboard of live countdown timers.",
   "author": {
     "name": "Justin Jaudines",

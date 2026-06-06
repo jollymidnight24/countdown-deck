@@ -12,7 +12,7 @@ let settings = {
   quietHoursEnabled: false, quietStart: '22:00', quietEnd: '07:00', snoozeMinutes: 5,
   accent: '', viewMode: 'cards', groupByCategory: false, collapsedGroups: [], onboarded: false,
   backupFolder: '', syncOnLaunch: false, shortcuts: {},
-  progressStyle: 'rounded', progressHeight: 8, progressColor: ''
+  progressStyle: 'rounded', progressHeight: 8, progressColor: '', progressPosition: 'inline', barPosition: 'top'
 };
 let lastTraySig = '';
 let focusId = null;
@@ -234,6 +234,8 @@ const fontScaleInput = $('fontScaleInput');
 const bgFile = $('bgFile');
 const bgDimInput = $('bgDimInput');
 const bgBlurInput = $('bgBlurInput');
+const iconInput = $('iconInput');
+const iconFile = $('iconFile');
 const alertSoundInput = $('alertSoundInput');
 const alertSoundFile = $('alertSoundFile');
 const alertBannerInput = $('alertBannerInput');
@@ -265,6 +267,8 @@ const progressStyleInput = $('progressStyleInput');
 const progressHeightInput = $('progressHeightInput');
 const progressColorModeInput = $('progressColorModeInput');
 const progressColorInput = $('progressColorInput');
+const progressPositionInput = $('progressPositionInput');
+const barPositionInput = $('barPositionInput');
 
 // ===========================================================================
 // Helpers
@@ -297,8 +301,38 @@ function normalize(c) {
     milestones: Array.isArray(c.milestones) ? c.milestones : [],   // minutes-before-end reminders
     createdAt: c.createdAt || Date.now(),
     bgDim: c.bgDim == null ? 60 : Number(c.bgDim),
-    bgBlur: c.bgBlur == null ? 0 : Number(c.bgBlur)
+    bgBlur: c.bgBlur == null ? 0 : Number(c.bgBlur),
+    icon: c.icon || 'auto'   // 'auto' | 'none' | an emoji | 'media:<file>'
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-countdown icons
+// ---------------------------------------------------------------------------
+const ICON_CHOICES = ['🚀', '💲', '📈', '📺', '🎬', '🎉', '🎂', '🏆', '✈️', '🗓️', '🛍️', '⏰', '❤️', '🔥', '🌙', '⭐'];
+const CATEGORY_ICONS = [
+  [/(market|trading|stock|nyse|nasdaq|exchange|finance|crypto|ipo)/i, '💲'],
+  [/(space|rocket|launch|spacex|nasa)/i, '🚀'],
+  [/(tv|show|series|episode|movie|film|premiere|season)/i, '📺'],
+  [/(holiday|christmas|new year|thanksgiving|halloween|easter)/i, '🎉'],
+  [/(birthday)/i, '🎂'],
+  [/(sport|game|match|cup|olympic|final)/i, '🏆'],
+  [/(travel|trip|flight|vacation|holiday trip)/i, '✈️'],
+  [/(deadline|work|project|meeting|launch day|release)/i, '🗓️'],
+  [/(sale|shopping|black friday|deal|cyber monday)/i, '🛍️']
+];
+function autoIcon(c) {
+  if (c.kind === 'trading') return '💲';
+  const hay = `${c.category} ${c.title}`;
+  for (const [re, emo] of CATEGORY_ICONS) if (re.test(hay)) return emo;
+  return '⏳';
+}
+// Returns { emoji, url } — emoji for text contexts, url for uploaded images.
+function cardIcon(c) {
+  if (c.icon === 'none') return { emoji: '', url: '' };
+  if (c.icon && c.icon.startsWith('media:')) return { emoji: '', url: mediaUrl(c.icon.slice(6)) };
+  if (c.icon && c.icon !== 'auto') return { emoji: c.icon, url: '' };
+  return { emoji: autoIcon(c), url: '' };
 }
 
 function targetMs(iso) { return new Date(iso).getTime(); }
@@ -411,9 +445,9 @@ function formatTarget(c) {
     }
     return `${sess} · ${formatInstant(ms)}${early} · each trading day`;
   }
-  const verb = c.mode === 'up' ? 'Since' : 'Target';
-  const rep = c.recurrence !== 'none' ? ` · repeats ${c.recurrence}` : '';
-  return `${verb}: ${formatInstant(ms)}${rep}`;
+  if (c.mode === 'up') return `Since ${formatInstant(ms)}`;
+  if (c.recurrence !== 'none') return `Next: ${formatInstant(ms)} · repeats ${c.recurrence}`;
+  return formatInstant(ms);   // one-shot: just the date, no label word
 }
 
 function toLocalInputValue(iso) {
@@ -494,20 +528,26 @@ function createCard(c) {
       <div class="done-banner hidden">🎉 It's here!</div>
       <div class="card-progress"><div class="card-progress-fill"></div></div>`;
 
-  card.querySelector('.t-text').textContent = c.title;
   card.querySelector('.t-target').textContent = formatTarget(c);
+  // Icon sits inline immediately before the first word of the title.
+  const ic = cardIcon(c);
+  const iconHtml = ic.url
+    ? `<span class="card-icon"><img class="icon-img" src="${ic.url}" alt=""></span>`
+    : (ic.emoji ? `<span class="card-icon">${ic.emoji}</span>` : '');
+  card.querySelector('.t-text').innerHTML = iconHtml + escapeHtml(c.title);
   applyCardAppearance(card, c);
   return card;
 }
 
 function render() {
   refreshCategoryControls();
+  renderTabs();
   const list = visibleCountdowns();
   emptyState.classList.toggle('hidden', countdowns.length !== 0);
   grid.classList.toggle('hidden', countdowns.length === 0);
   grid.innerHTML = '';
 
-  const viewClass = settings.viewMode === 'compact' ? 'view-compact' : settings.viewMode === 'list' ? 'view-list' : '';
+  const viewClass = (settings.viewMode && settings.viewMode !== 'cards') ? 'view-' + settings.viewMode : '';
 
   if (settings.groupByCategory) {
     grid.className = 'grid grouped';                 // container holds sections
@@ -679,7 +719,10 @@ function tick() {
   const aux = auxList(now);
   const curId = pickCurrentId(now, aux);
   updateTray(now, aux, curId);
-  window.api.updateAux({ items: aux, currentId: curId });
+  window.api.updateAux({
+    items: aux, currentId: curId,
+    prog: { style: settings.progressStyle, height: settings.progressHeight, color: settings.progressColor }
+  });
   tickCount++;
 }
 
@@ -693,7 +736,8 @@ function auxList(now) {
     .slice(0, 12)
     .map(({ c, ms }) => {
       const u = unitsFromMs(ms);
-      return { id: c.id, title: c.title, color: c.color, d: u.d, h: u.h, m: u.m, s: u.s };
+      const ic = cardIcon(c);
+      return { id: c.id, title: c.title, color: c.color, icon: ic.emoji, iconUrl: ic.url, d: u.d, h: u.h, m: u.m, s: u.s, progress: progressFraction(c, Date.now()) };
     });
 }
 
@@ -850,7 +894,7 @@ function pickCurrentId(now, items) {
   }
   return items[0].id;
 }
-const trayLabel = (it) => `${it.title}: ${it.d}d ${pad(it.h)}h ${pad(it.m)}m`;
+const trayLabel = (it) => `${it.icon ? it.icon + ' ' : ''}${it.title}: ${it.d}d ${pad(it.h)}h ${pad(it.m)}m`;
 
 function updateTray(now, items, curId) {
   const labels = items.slice(0, 8).map(trayLabel);
@@ -860,6 +904,29 @@ function updateTray(now, items, curId) {
   if (sig === lastTraySig) return;              // avoid redundant IPC every second
   lastTraySig = sig;
   window.api.updateTray({ title, items: labels });
+}
+
+function applyBarPosition() { document.body.dataset.bar = settings.barPosition || 'top'; }
+
+function goHome() {
+  searchInput.value = '';
+  categoryFilter.value = '';
+  closeFocus();
+  render();
+}
+
+// Browser-like category tabs (synced with the category filter).
+function renderTabs() {
+  const bar = $('tabsBar');
+  const cats = [...new Set(countdowns.map((c) => c.category).filter(Boolean))].sort();
+  bar.classList.toggle('hidden', cats.length === 0);
+  if (!cats.length) { bar.innerHTML = ''; return; }
+  const cur = categoryFilter.value;
+  const tabs = [['', 'All']].concat(cats.map((c) => [c, c]));
+  bar.innerHTML = tabs.map(([v, label]) =>
+    `<button class="tab${v === cur ? ' active' : ''}" data-cat="${escapeHtml(v)}">${escapeHtml(label)}</button>`
+  ).join('');
+  bar.querySelectorAll('.tab').forEach((el) => el.addEventListener('click', () => { categoryFilter.value = el.dataset.cat; render(); }));
 }
 
 function refreshCategoryControls() {
@@ -989,6 +1056,7 @@ function applyUiFont() { document.body.style.setProperty('--ui-font', FONTS[sett
 function applyUiScale() { window.api.setZoom(Number(settings.uiScale) || 1); }
 function applyProgress() {
   document.body.dataset.progress = settings.progressStyle || 'rounded';
+  document.body.dataset.progresspos = settings.progressPosition || 'inline';
   document.body.style.setProperty('--progress-h', (Number(settings.progressHeight) || 8) + 'px');
   if (settings.progressColor) document.body.style.setProperty('--progress-color', settings.progressColor);
   else document.body.style.removeProperty('--progress-color');
@@ -1083,6 +1151,13 @@ function buildFontSelect(sel, includeInherit) {
   sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${escapeHtml(t)}</option>`).join('');
 }
 
+function buildIconSelect(sel) {
+  const emojiOpts = ICON_CHOICES.map((e) => `<option value="${e}">${e}</option>`).join('');
+  sel.innerHTML = '<option value="auto">Auto (by category)</option><option value="none">None</option>' +
+    `<optgroup label="Emoji">${emojiOpts}</optgroup>` +
+    '<option value="upload">Upload image…</option>';
+}
+
 function buildSoundSelect(sel) {
   const builtins = ['none', 'beep', 'digital', 'chime', 'bell', 'radar', 'pulse'];
   sel.innerHTML = builtins.map((k) => `<option value="${k}">${SOUND_LABELS[k]}</option>`).join('') +
@@ -1154,9 +1229,11 @@ function openModal(editId = null) {
   buildBgSelect(bgInput, { includeAuto: true });
   buildFontSelect(fontInput, true);
   buildSoundSelect(alertSoundInput);
+  buildIconSelect(iconInput);
   buildExchangeSelect();
   $('bgUploadWrap').classList.add('hidden');
   $('alertUploadWrap').classList.add('hidden');
+  $('iconUploadWrap').classList.add('hidden');
 
   if (editId) {
     const c = countdowns.find((x) => x.id === editId);
@@ -1182,6 +1259,12 @@ function openModal(editId = null) {
     fontScaleInput.value = String(c.fontScale || 1);
     bgDimInput.value = c.bgDim == null ? 60 : c.bgDim;
     bgBlurInput.value = c.bgBlur || 0;
+    if (c.icon && c.icon.startsWith('media:')) {
+      const o = document.createElement('option');
+      o.value = c.icon; o.textContent = 'Current uploaded icon';
+      iconInput.appendChild(o);
+    }
+    iconInput.value = c.icon || 'auto';
     if (c.alertSound && c.alertSound.startsWith('media:')) {
       const o = document.createElement('option');
       o.value = c.alertSound; o.textContent = 'Current uploaded sound';
@@ -1206,6 +1289,7 @@ function openModal(editId = null) {
     fontScaleInput.value = '1';
     bgDimInput.value = 60;
     bgBlurInput.value = 0;
+    iconInput.value = 'auto';
     alertSoundInput.value = 'none';
     alertBannerInput.checked = true;
     alertFlashInput.checked = false;
@@ -1233,6 +1317,7 @@ function saveFromForm(evt) {
     fontScale: Number(fontScaleInput.value) || 1,
     bgDim: Number(bgDimInput.value),
     bgBlur: Number(bgBlurInput.value),
+    icon: iconInput.value === 'upload' ? 'auto' : iconInput.value,
     alertSound: soundValueOrNone(alertSoundInput.value),
     alertBanner: alertBannerInput.checked,
     alertFlash: alertFlashInput.checked,
@@ -1387,6 +1472,8 @@ function openSettings() {
   accentInput.value = settings.accent || currentAccentHex();
   progressStyleInput.value = settings.progressStyle || 'rounded';
   progressHeightInput.value = Number(settings.progressHeight) || 8;
+  progressPositionInput.value = settings.progressPosition || 'inline';
+  barPositionInput.value = settings.barPosition || 'top';
   progressColorModeInput.value = settings.progressColor ? 'custom' : 'accent';
   progressColorInput.value = settings.progressColor || '#5b8cff';
   $('progressColorWrap').classList.toggle('hidden', !settings.progressColor);
@@ -1592,6 +1679,7 @@ async function init() {
   applyUiFont();
   applyUiScale();
   applyProgress();
+  applyBarPosition();
   applyDashboardBg();
   sortSelect.value = settings.sort;
   viewSelect.value = settings.viewMode || 'cards';
@@ -1616,6 +1704,7 @@ async function init() {
   // toolbar
   $('addBtn').addEventListener('click', () => openModal());
   $('emptyAddBtn').addEventListener('click', () => openModal());
+  $('homeBtn').addEventListener('click', goHome);
   searchInput.addEventListener('input', render);
   categoryFilter.addEventListener('change', render);
   sortSelect.addEventListener('change', () => { settings.sort = sortSelect.value; persistSettings(); render(); });
@@ -1646,6 +1735,8 @@ async function init() {
   progressColorInput.addEventListener('input', () => {
     if (progressColorModeInput.value === 'custom') { settings.progressColor = progressColorInput.value; persistSettings(); applyProgress(); }
   });
+  progressPositionInput.addEventListener('change', () => { settings.progressPosition = progressPositionInput.value; persistSettings(); applyProgress(); });
+  barPositionInput.addEventListener('change', () => { settings.barPosition = barPositionInput.value; persistSettings(); applyBarPosition(); });
   $('welcomeClose').addEventListener('click', () => { $('welcomeOverlay').classList.add('hidden'); settings.onboarded = true; persistSettings(); });
   $('miniBtn').addEventListener('click', () => window.api.toggleMini());
 
@@ -1704,6 +1795,11 @@ async function init() {
     else playSound(soundValueOrNone(alertSoundInput.value));   // audition on pick
   });
   alertSoundFile.addEventListener('change', () => handleMediaPick(alertSoundFile, alertSoundInput, $('alertUploadWrap')));
+  iconInput.addEventListener('change', () => {
+    $('iconUploadWrap').classList.toggle('hidden', iconInput.value !== 'upload');
+    if (iconInput.value === 'upload') iconFile.click();
+  });
+  iconFile.addEventListener('change', () => handleMediaPick(iconFile, iconInput, $('iconUploadWrap')));
   $('alertPreviewBtn').addEventListener('click', () => playSound(soundValueOrNone(alertSoundInput.value)));
   $('flashDismiss').addEventListener('click', dismissFlash);
 

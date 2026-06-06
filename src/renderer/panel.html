@@ -2,22 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' cdmedia: data:;" />
   <title>Countdowns</title>
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; margin: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #e8edff; background: #161f3d; user-select: none; padding: 8px;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #e8edff; background: #161f3d; user-select: none; padding: 8px; }
     h1 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #93a0c9; margin: 4px 6px 8px; }
     .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
     .item:hover { background: rgba(255,255,255,0.07); }
-    .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .ic { width: 18px; text-align: center; flex: none; font-size: 15px; }
+    .ic img { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
     .it { flex: 1; min-width: 0; }
     .t { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .r { font-size: 12px; color: #93a0c9; font-variant-numeric: tabular-nums; }
+    .pbar { height: var(--progress-h, 6px); background: rgba(255,255,255,0.18); margin-top: 4px; border-radius: 999px; overflow: hidden; }
+    .pfill { height: 100%; width: 0%; background: var(--progress-color, var(--dot, #5b8cff)); border-radius: 999px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
     .empty { color: #93a0c9; font-size: 13px; padding: 16px; text-align: center; }
     .foot { margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; }
     .open { width: 100%; background: #5b8cff; color: #fff; border: none; border-radius: 9px; padding: 9px; font-size: 13px; cursor: pointer; }

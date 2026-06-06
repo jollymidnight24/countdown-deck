@@ -109,6 +109,33 @@ html, body {
   .animbg-aurora, .animbg-ember, .animbg-ocean, .animbg-twilight { animation: none; }
 }
 
+/* Toolbar position (top / left / right / bottom) ---------------------- */
+body { display: flex; min-height: 100vh; }
+#content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+body[data-bar="top"], body[data-bar="bottom"] { flex-direction: column; }
+body[data-bar="bottom"] .topbar { order: 2; position: sticky; bottom: 0; top: auto; border-top: 1px solid var(--line); border-bottom: none; }
+body[data-bar="bottom"] #content { order: 1; }
+body[data-bar="left"], body[data-bar="right"] { flex-direction: row; }
+body[data-bar="right"] #content { order: 1; }
+body[data-bar="left"] .topbar, body[data-bar="right"] .topbar {
+  flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px;
+  height: 100vh; width: 216px; min-width: 216px; max-width: 216px;
+  position: sticky; top: 0; padding: 16px 14px;
+  border-bottom: none; overflow-x: hidden; overflow-y: auto; flex-wrap: nowrap;
+}
+body[data-bar="left"] .topbar { border-right: 1px solid var(--line); }
+body[data-bar="right"] .topbar { order: 2; border-left: 1px solid var(--line); }
+body[data-bar="left"] .toolbar, body[data-bar="right"] .toolbar {
+  flex-direction: column; align-items: stretch; justify-content: flex-start; flex-wrap: nowrap; gap: 10px; width: 100%;
+}
+body[data-bar="left"] .brand, body[data-bar="right"] .brand { width: 100%; justify-content: flex-start; }
+body[data-bar="left"] .search, body[data-bar="right"] .search,
+body[data-bar="left"] .select, body[data-bar="right"] .select,
+body[data-bar="left"] #addBtn, body[data-bar="right"] #addBtn { width: 100%; }
+/* icon buttons form a tidy row that fills the sidebar width */
+body[data-bar="left"] .tool-icons, body[data-bar="right"] .tool-icons { justify-content: space-between; width: 100%; gap: 6px; }
+body[data-bar="left"] .tool-icons .icon-btn, body[data-bar="right"] .tool-icons .icon-btn { flex: 1 1 0; min-width: 0; }
+
 /* Topbar -------------------------------------------------------------- */
 .topbar {
   display: flex;
@@ -124,11 +151,43 @@ html, body {
   z-index: 10;
   flex-wrap: wrap;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand .logo { font-size: 22px; }
-.brand h1 { font-size: 17px; margin: 0; letter-spacing: 0.3px; }
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--chip); border: 1px solid var(--line); cursor: pointer;
+  padding: 7px 12px; border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+.brand:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--chip));
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.brand:active { transform: translateY(1px); }
+.brand-logo { width: 26px; height: 26px; color: var(--accent); flex: none; filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 45%, transparent)); }
+/* Serif "CD" monogram (classic high-contrast serif, like the reference logo) */
+.brand-monogram {
+  font-family: "Times New Roman", "Georgia", "Hoefler Text", "Playfair Display", serif;
+  font-weight: 700; font-size: 30px; line-height: 0.9; letter-spacing: -3px;
+  color: var(--text); flex: none;
+}
+.brand-sub {
+  font-size: 11px; line-height: 1.05; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted); text-align: left;
+}
+.brand:hover .brand-monogram { color: var(--accent); }
+
+/* Category tabs */
+.tabs { display: flex; gap: 6px; padding: 4px 22px 10px; flex-wrap: wrap; }
+.tab {
+  background: var(--chip); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 9px 9px 0 0; padding: 7px 14px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); background: var(--card); border-bottom-color: var(--accent); }
 
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tool-icons { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .search, .select {
   background: var(--field);
   border: 1px solid var(--line);
@@ -202,6 +261,31 @@ main { padding: 12px 22px 28px; }
 .grid.view-list .unit { padding: 5px 2px; }
 .grid.view-list .unit .num { font-size: calc(20px * var(--card-scale)); }
 .grid.view-list .done-banner { margin: 0 0 0 10px; }
+/* keep the progress bar visible in list view regardless of position setting */
+.grid.view-list .card { padding-bottom: 18px; }
+.grid.view-list .card-progress { position: absolute; left: 12px; right: 12px; bottom: 6px; top: auto; margin: 0; width: auto; }
+
+/* Column view: one centred column of full-size cards */
+.grid.view-column { grid-template-columns: minmax(0, 720px); justify-content: center; gap: 16px; }
+
+/* Gallery view: large showcase cards */
+.grid.view-gallery { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 22px; }
+.grid.view-gallery .card { padding: 24px; }
+.grid.view-gallery .unit { padding: 16px 6px; }
+.grid.view-gallery .unit .num { font-size: calc(40px * var(--card-scale)); }
+.grid.view-gallery .card-title { font-size: calc(19px * var(--card-scale)); }
+
+/* Fan view: overlapping fanned cards, straighten on hover */
+.grid.view-fan { display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 0; padding: 44px 40px 54px; }
+.grid.view-fan .card { flex: 0 0 280px; transform-origin: bottom center; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.grid.view-fan .card:not(:first-child) { margin-left: -64px; }
+.grid.view-fan .card:nth-child(odd) { transform: rotate(-4deg) translateY(6px); }
+.grid.view-fan .card:nth-child(even) { transform: rotate(4deg); }
+.grid.view-fan .card:hover { transform: rotate(0deg) translateY(-14px) scale(1.03); z-index: 5; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); }
+@media (prefers-reduced-motion: reduce) {
+  .grid.view-fan .card, .grid.view-fan .card:nth-child(odd), .grid.view-fan .card:nth-child(even) { transform: none; }
+  .grid.view-fan .card:not(:first-child) { margin-left: 0; }
+}
 
 /* Collapsible category groups */
 .group { margin-bottom: 22px; }
@@ -254,6 +338,8 @@ main { padding: 12px 22px 28px; }
 .card { --card-scale: 1; }
 .card-title { font-size: calc(16px * var(--card-scale)); font-weight: 650; line-height: 1.3; word-break: break-word; display: flex; align-items: center; gap: 6px; }
 .pin-dot { font-size: 12px; }
+.card-icon { font-size: 16px; line-height: 1; margin-right: 5px; white-space: nowrap; }
+.card-icon .icon-img { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; vertical-align: -3px; }
 .card-meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .tag {
   background: var(--chip);
@@ -352,15 +438,33 @@ hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 .card-progress { position: absolute; left: 0; right: 0; bottom: 0; height: var(--progress-h, 8px); background: rgba(0,0,0,0.28); z-index: 2; }
 .card-progress-fill { height: 100%; width: 0%; background: var(--progress-color, var(--card-accent, var(--accent))); transition: width 0.5s ease; }
 
-/* shape */
+/* shape (border-radius only — positioning handled separately) */
 body[data-progress="rounded"] .card-progress,
 body[data-progress="striped"] .card-progress,
 body[data-progress="glow"] .card-progress,
-body[data-progress="sweep"] .card-progress { border-radius: 999px; overflow: hidden; left: 8px; right: 8px; bottom: 6px; }
+body[data-progress="sweep"] .card-progress { border-radius: 999px; overflow: hidden; }
 body[data-progress="rounded"] .card-progress-fill,
 body[data-progress="striped"] .card-progress-fill,
 body[data-progress="glow"] .card-progress-fill,
 body[data-progress="sweep"] .card-progress-fill { border-radius: 999px; }
+
+/* position — keeps the bar clear of the timer */
+body[data-progresspos="bottom"] .card-progress { position: absolute; left: 0; right: 0; bottom: 0; top: auto; }
+body[data-progresspos="top"] .card-progress { position: absolute; left: 0; right: 0; top: 0; bottom: auto; }
+body[data-progresspos="inline"] .card-progress { position: static; margin-top: 12px; }
+body[data-progresspos="hidden"] .card-progress { display: none !important; }
+/* float rounded pills slightly in from the edges */
+body[data-progresspos="bottom"][data-progress="rounded"] .card-progress,
+body[data-progresspos="bottom"][data-progress="striped"] .card-progress,
+body[data-progresspos="bottom"][data-progress="glow"] .card-progress,
+body[data-progresspos="bottom"][data-progress="sweep"] .card-progress { left: 10px; right: 10px; bottom: 8px; }
+body[data-progresspos="top"][data-progress="rounded"] .card-progress,
+body[data-progresspos="top"][data-progress="striped"] .card-progress,
+body[data-progresspos="top"][data-progress="glow"] .card-progress,
+body[data-progresspos="top"][data-progress="sweep"] .card-progress { left: 10px; right: 10px; top: 8px; }
+/* reserve room so absolute bars never overlap the timer */
+body[data-progresspos="bottom"] .card { padding-bottom: 22px; }
+body[data-progresspos="top"] .card { padding-top: 24px; }
 
 /* animated looks */
 body[data-progress="striped"] .card-progress-fill {
@@ -431,6 +535,20 @@ body[data-progress="sweep"] .card-progress-fill {
 .appearance { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 2px; margin: 4px 0 14px; }
 .appearance legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
 .settings-h { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 16px 0 8px; }
+/* Collapsible, clearly-segregated settings sections */
+.settings-section { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; background: var(--field); overflow: hidden; }
+.settings-section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  padding: 12px 14px; font-size: 13px; font-weight: 700; letter-spacing: 0.4px;
+  color: var(--text); display: flex; align-items: center; gap: 8px;
+}
+.settings-section > summary::-webkit-details-marker { display: none; }
+.settings-section > summary::before { content: "▸"; color: var(--accent); transition: transform 0.15s ease; }
+.settings-section[open] > summary::before { transform: rotate(90deg); }
+.settings-section[open] > summary { border-bottom: 1px solid var(--line); }
+.settings-section > *:not(summary) { margin-left: 14px; margin-right: 14px; }
+.settings-section > .form-grid { padding: 12px 0; }
+.settings-section > .switch-row, .settings-section > label, .settings-section > .io-row, .settings-section > .hint, .settings-section > #shortcutList { margin-top: 10px; margin-bottom: 10px; }
 .modal select { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 14px; }
 .modal input[type="number"] { width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--field); color: var(--text); font-size: 14px; }
 .modal input[type="file"] { width: 100%; margin-top: 6px; font-size: 12px; color: var(--muted); }

@@ -94,7 +94,9 @@ const DEFAULT_SETTINGS = {
   shortcuts: {},         // commandId -> key combo string
   progressStyle: 'rounded',
   progressHeight: 8,
-  progressColor: ''      // '' = each card's accent, else a hex color
+  progressColor: '',     // '' = each card's accent, else a hex color
+  progressPosition: 'inline', // 'inline' | 'bottom' | 'top' | 'hidden'
+  barPosition: 'top'     // toolbar placement: 'top' | 'left' | 'right' | 'bottom'
 };
 
 function loadSettings() {
@@ -267,6 +269,7 @@ let miniWindow = null;
 let panelWindow = null;
 let lastAux = [];        // most recent countdown summary list from the renderer
 let lastCurrentId = null; // which one the menu-bar/mini should highlight
+let lastProg = {};        // progress-bar style settings for the aux windows
 
 function auxWebPrefs() {
   return {
@@ -311,9 +314,12 @@ function showPanel() {
 }
 
 function pushAux() {
-  const top = lastAux.find((x) => x.id === lastCurrentId) || lastAux[0] || null;
-  if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('mini:data', top);
-  if (panelWindow && !panelWindow.isDestroyed()) panelWindow.webContents.send('panel:data', lastAux);
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.webContents.send('mini:data', { items: lastAux, currentId: lastCurrentId, prog: lastProg });
+  }
+  if (panelWindow && !panelWindow.isDestroyed()) {
+    panelWindow.webContents.send('panel:data', { items: lastAux, prog: lastProg });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +400,7 @@ ipcMain.handle('tray:update', (_e, summaries) => updateTray(summaries));
 ipcMain.handle('aux:update', (_e, payload) => {
   lastAux = payload && Array.isArray(payload.items) ? payload.items : [];
   lastCurrentId = payload ? payload.currentId : null;
+  lastProg = (payload && payload.prog) || {};
   pushAux();
 });
 ipcMain.handle('mini:toggle', () => toggleMini());
